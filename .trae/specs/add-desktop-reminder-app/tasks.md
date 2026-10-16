@@ -1,0 +1,41 @@
+# Tasks
+
+- [x] Task 1: 初始化 electron-vite 工程（Vue + TypeScript，pnpm）
+  - [x] SubTask 1.1: 使用 electron-vite 官方 Vue+TS 模板创建工程，改用 pnpm，配置 `electron.vite.config.ts` 与 `package.json` 脚本（dev/build/lint/typecheck）
+  - [x] SubTask 1.2: 运行 `pnpm install` 与 `pnpm run dev`，确认桌面窗口正常启动
+  - [x] SubTask 1.3: 运行 `pnpm run build`，确认可正常构建
+- [x] Task 2: 集成 Tailwind CSS 与 shadcn-vue
+  - [x] SubTask 2.1: 按 shadcn-vue 官方文档接入 Tailwind CSS，配置路径别名 `@`、`components.json`、`src/renderer/src/lib/utils.ts`（cn 函数）
+  - [x] SubTask 2.2: 添加所需 UI 组件：button、card、input、label、switch、select、checkbox、dialog、badge、separator、tooltip
+  - [x] SubTask 2.3: 安装并配置 lucide-vue-next 图标库
+- [x] Task 3: 数据模型与本地持久化（主进程）
+  - [x] SubTask 3.1: 定义共享类型 `Alarm` 与 `RepeatType`（none | daily | weekly | weekdays）
+  - [x] SubTask 3.2: 实现 alarm store：基于 `app.getPath('userData')` 下 JSON 文件的加载/保存与增删改查
+- [x] Task 4: 调度引擎（主进程）
+  - [x] SubTask 4.1: 实现纯函数 `shouldFire(alarm, now)` 及重复周期匹配逻辑
+  - [x] SubTask 4.2: 实现定时 ticker：按分钟检测到期提醒，并按 `id + 日期 + HH:mm` 去重
+  - [x] SubTask 4.3: 为调度逻辑编写 Vitest 单元测试
+- [x] Task 5: 通知、托盘与窗口生命周期（主进程）
+  - [x] SubTask 5.1: 实现系统原生通知（Notification），点击聚焦主窗口，并设置 appUserModelId
+  - [x] SubTask 5.2: 实现系统托盘图标与右键菜单（显示主窗口 / 退出）
+  - [x] SubTask 5.3: 实现关闭窗口隐藏到托盘、仅通过托盘退出才结束进程
+- [x] Task 6: IPC 桥接
+  - [x] SubTask 6.1: preload 暴露类型化 `window.api.alarms`（list/create/update/delete/toggle）及数据变更事件
+  - [x] SubTask 6.2: 主进程注册 IPC handlers，并联动 store 与调度器重新排程
+- [x] Task 7: 渲染层 UI（Vue + shadcn-vue）
+  - [x] SubTask 7.1: 实现 `useAlarms` composable 封装 IPC 与响应式状态
+  - [x] SubTask 7.2: 实现提醒列表（卡片、启用开关、编辑、删除）
+  - [x] SubTask 7.3: 实现新增/编辑提醒弹窗（标题 + 时间 + 重复周期选择，选择“每周”时显示星期多选）
+  - [x] SubTask 7.4: 实现空状态与整体样式打磨（统一使用 lucide-vue-next 图标）
+- [x] Task 8: 端到端验证
+  - [x] SubTask 8.1: 手动验证创建/编辑/删除/启用、到点通知、托盘常驻等场景
+  - [x] SubTask 8.2: 逐条核对 `checklist.md`
+
+# Task Dependencies
+- Task 2 depends on Task 1
+- Task 3 depends on Task 1
+- Task 4 depends on Task 3
+- Task 5 depends on Task 1
+- Task 6 depends on Task 3, Task 4, Task 5
+- Task 7 depends on Task 2, Task 6
+- Task 8 depends on Task 1-7

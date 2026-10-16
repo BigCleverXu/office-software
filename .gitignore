@@ -1,0 +1,8 @@
+node_modules
+dist
+out
+.pnpm-store
+node-compile-cache
+.DS_Store
+.eslintcache
+*.log*
