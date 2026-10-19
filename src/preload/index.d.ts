@@ -1,6 +1,7 @@
 import type { ElectronAPI } from '@electron-toolkit/preload'
 import type { AlarmApi } from '../shared/types'
 import type { MarketApi } from '../shared/market'
+import type { UpdateApi } from '../shared/update'
 
 declare global {
   interface Window {
@@ -8,6 +9,7 @@ declare global {
     api: {
       alarms: AlarmApi
       market: MarketApi
+      update: UpdateApi
     }
   }
 }

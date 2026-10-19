@@ -12,6 +12,7 @@ import {
   type MarketState
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
+import { UPDATE_CHANNELS, type UpdateApi } from '../shared/update'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -74,7 +75,11 @@ const market: MarketApi = {
   }
 }
 
-const api = { alarms, market }
+const update: UpdateApi = {
+  check: () => ipcRenderer.invoke(UPDATE_CHANNELS.check)
+}
+
+const api = { alarms, market, update }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

@@ -16,7 +16,7 @@ import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
-import { registerAlarmIpc, registerMarketIpc } from './ipc'
+import { registerAlarmIpc, registerMarketIpc, registerUpdateIpc } from './ipc'
 import { fetchQuotes } from './quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
@@ -183,6 +183,8 @@ app.whenReady().then(() => {
     scheduler: marketScheduler,
     getWindow: () => mainWindow
   })
+
+  registerUpdateIpc({ getVersion: () => app.getVersion() })
 
   createWindow()
 

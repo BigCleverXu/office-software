@@ -9,6 +9,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip'
 import { MODULES } from '@/lib/modules'
+import UpdateCheckEntry from './UpdateCheckEntry.vue'
 
 const props = defineProps<{ active: AppModuleId; collapsed: boolean }>()
 
@@ -92,7 +93,8 @@ const navItems = computed<NavItem[]>(() =>
       </template>
     </nav>
 
-    <div class="border-sidebar-border border-t p-2">
+    <div class="border-sidebar-border flex flex-col gap-1 border-t p-2">
+      <UpdateCheckEntry :collapsed="collapsed" />
       <button
         type="button"
         class="text-muted-foreground hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:text-sidebar-accent-foreground"
