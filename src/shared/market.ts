@@ -1,11 +1,10 @@
 // 行情看板共享契约：类型 + 纯函数 + 常量
 // 仅依赖语言内置能力，主进程 / preload / 渲染层共用
 
+import type { AppModuleId } from './navigation'
+
 /** 市场标识 */
 export type MarketId = 'sh' | 'sz'
-
-/** 页面标识 */
-export type MarketPage = 'alarms' | 'market'
 
 /** 单只标的的行情快照 */
 export interface Quote {
@@ -54,7 +53,7 @@ export interface WatchItem {
 /** 页面设置 */
 export interface MarketSettings {
   paused: boolean
-  lastPage: MarketPage
+  lastPage: AppModuleId
 }
 
 /** 行情页整体状态 */
@@ -123,9 +122,9 @@ export interface MarketApi {
   removeWatch: (symbol: string) => Promise<WatchItem[]>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<void>
-  setLastPage: (page: MarketPage) => Promise<void>
+  setLastPage: (page: AppModuleId) => Promise<void>
   onStateChanged: (callback: (state: MarketState) => void) => () => void
-  onNavigate: (callback: (page: MarketPage) => void) => () => void
+  onNavigate: (callback: (module: AppModuleId) => void) => () => void
 }
 
 /** 三个固定指数，顺序即页面展示顺序 */

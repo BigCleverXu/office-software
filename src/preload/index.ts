@@ -9,9 +9,9 @@ import {
 import {
   MARKET_CHANNELS,
   type MarketApi,
-  type MarketPage,
   type MarketState
 } from '../shared/market'
+import type { AppModuleId } from '../shared/navigation'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -46,7 +46,7 @@ const market: MarketApi = {
   refreshNow: () => ipcRenderer.invoke(MARKET_CHANNELS.refreshNow),
   setPaused: (paused: boolean) =>
     ipcRenderer.invoke(MARKET_CHANNELS.setPaused, paused),
-  setLastPage: (page: MarketPage) =>
+  setLastPage: (page: AppModuleId) =>
     ipcRenderer.invoke(MARKET_CHANNELS.setLastPage, page),
   onStateChanged: (callback: (state: MarketState) => void) => {
     const listener = (
@@ -60,10 +60,10 @@ const market: MarketApi = {
       ipcRenderer.removeListener(MARKET_CHANNELS.stateChanged, listener)
     }
   },
-  onNavigate: (callback: (page: MarketPage) => void) => {
+  onNavigate: (callback: (page: AppModuleId) => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
-      page: MarketPage
+      page: AppModuleId
     ): void => {
       callback(page)
     }

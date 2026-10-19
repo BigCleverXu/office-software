@@ -8,9 +8,9 @@ import {
   MARKET_CHANNELS,
   normalizeCode,
   type AddWatchResult,
-  type MarketPage,
   type MarketState
 } from '../shared/market'
+import type { AppModuleId } from '../shared/navigation'
 import type { MarketStore } from './market-store'
 import type { MarketScheduler } from './market-scheduler'
 import { fetchQuotes } from './quote-provider'
@@ -159,7 +159,7 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
 
   ipcMain.handle(
     MARKET_CHANNELS.setLastPage,
-    (_event: Electron.IpcMainInvokeEvent, page: MarketPage) => {
+    (_event: Electron.IpcMainInvokeEvent, page: AppModuleId) => {
       store.setLastPage(page)
       broadcast()
     }

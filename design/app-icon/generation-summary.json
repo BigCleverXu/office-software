@@ -1,0 +1,44 @@
+{
+  "skill": {
+    "name": "solo-graphic-generation",
+    "version": "2026.10.13.09.48.16",
+    "release": "canonical-image-node-append-plugin-0.1.3",
+    "versionSource": "skill-release-manifest.json"
+  },
+  "size": {
+    "requestedVerbatim": "方图 1920×1920（推荐）",
+    "actualImageSize": "1920x1920",
+    "userConfirmedDifference": false,
+    "note": "用户经选项确认 1:1 方图 1920×1920；与工具实际传参一致，无替换。"
+  },
+  "assetCount": 2,
+  "assets": [
+    {
+      "filename": "app-icon-bell-trend.jpg",
+      "title": "应用图标 · 铃铛与走势线",
+      "intendedSize": "1920x1920",
+      "status": "success",
+      "note": "原始生成产物，右下角含平台烧入的“AI生成”水印。"
+    },
+    {
+      "filename": "app-icon-bell-trend-clean.png",
+      "title": "应用图标 · 去水印透明母版",
+      "intendedSize": "1920x1920",
+      "status": "success",
+      "note": "在原始产物基础上抹除烧入水印，并把圆角外的白底置为透明；作为 .icns/.ico 的打包母版。"
+    }
+  ],
+  "canvasImageNodeIds": ["image-001", "image-002"],
+  "electronIconPackaging": {
+    "icns": {
+      "path": "build/icon.icns",
+      "entries": ["icp4", "icp5", "icp6", "ic07", "ic08", "ic09",
+                  "ic10", "ic11", "ic12", "ic13", "ic14"]
+    },
+    "ico": {
+      "path": "build/icon.ico",
+      "sizes": [16, 24, 32, 48, 64, 128, 256]
+    },
+    "replacedTemplateDefaults": true
+  }
+}

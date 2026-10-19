@@ -5,15 +5,19 @@ import {
   codeFromSymbol,
   normalizeCode,
   type MarketId,
-  type MarketPage,
   type MarketSettings,
   type WatchItem
 } from '../shared/market'
+import {
+  DEFAULT_MODULE,
+  isAppModuleId,
+  type AppModuleId
+} from '../shared/navigation'
 
 /** 默认设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
   paused: false,
-  lastPage: 'alarms'
+  lastPage: DEFAULT_MODULE
 }
 
 /** market.json 的完整结构 */
@@ -70,7 +74,7 @@ function normalizeSettings(raw: unknown): MarketSettings {
   const record = raw as Partial<MarketSettings>
   return {
     paused: typeof record.paused === 'boolean' ? record.paused : false,
-    lastPage: record.lastPage === 'market' ? 'market' : 'alarms'
+    lastPage: isAppModuleId(record.lastPage) ? record.lastPage : DEFAULT_MODULE
   }
 }
 
@@ -234,7 +238,7 @@ export class MarketStore {
   }
 
   /** 便捷方法：记录上次停留页面 */
-  setLastPage(page: MarketPage): MarketSettings {
+  setLastPage(page: AppModuleId): MarketSettings {
     return this.updateSettings({ lastPage: page })
   }
 }

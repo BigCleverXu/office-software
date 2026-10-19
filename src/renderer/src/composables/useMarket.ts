@@ -2,12 +2,12 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import type { Ref } from 'vue'
 import type {
   AddWatchResult,
-  MarketPage,
   MarketSettings,
   MarketSnapshot,
   MarketState,
   WatchItem
 } from '@shared/market'
+import type { AppModuleId } from '@shared/navigation'
 
 interface UseMarket {
   snapshot: Ref<MarketSnapshot>
@@ -18,7 +18,7 @@ interface UseMarket {
   removeWatch: (symbol: string) => Promise<void>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<void>
-  setLastPage: (page: MarketPage) => Promise<void>
+  setLastPage: (page: AppModuleId) => Promise<void>
 }
 
 /** 首次加载且尚未拿到数据时的初始快照 */
@@ -81,7 +81,7 @@ export function useMarket(): UseMarket {
     await window.api.market.setPaused(paused)
   }
 
-  const setLastPage = async (page: MarketPage): Promise<void> => {
+  const setLastPage = async (page: AppModuleId): Promise<void> => {
     settings.value = { ...settings.value, lastPage: page }
     await window.api.market.setLastPage(page)
   }

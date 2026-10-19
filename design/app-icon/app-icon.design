@@ -1,0 +1,41 @@
+{
+  "data": [
+    {
+      "id": "image-001",
+      "title": "应用图标 · 铃铛与走势线",
+      "type": "image",
+      "version": 1,
+      "createdAt": 1792388728610,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "naturalSize": {
+          "width": 1920,
+          "height": 1920
+        }
+      },
+      "devMetadata": {
+        "imageSrc": "assets/app-icon-bell-trend.jpg"
+      }
+    },
+    {
+      "id": "image-002",
+      "title": "应用图标 · 去水印透明母版",
+      "type": "image",
+      "version": 1,
+      "createdAt": 1792389123871,
+      "devMetadata": {
+        "imageSrc": "assets/app-icon-bell-trend-clean.png"
+      },
+      "canvasData": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "freeSize",
+    "projectName": "行情提醒 应用图标"
+  }
+}
