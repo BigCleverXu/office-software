@@ -6,6 +6,12 @@ import {
   type AlarmApi,
   type AlarmDraft
 } from '../shared/types'
+import {
+  MARKET_CHANNELS,
+  type MarketApi,
+  type MarketPage,
+  type MarketState
+} from '../shared/market'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -31,7 +37,44 @@ const alarms: AlarmApi = {
   }
 }
 
-const api = { alarms }
+const market: MarketApi = {
+  getState: () => ipcRenderer.invoke(MARKET_CHANNELS.getState),
+  addWatch: (code: string) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.addWatch, code),
+  removeWatch: (symbol: string) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.removeWatch, symbol),
+  refreshNow: () => ipcRenderer.invoke(MARKET_CHANNELS.refreshNow),
+  setPaused: (paused: boolean) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.setPaused, paused),
+  setLastPage: (page: MarketPage) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.setLastPage, page),
+  onStateChanged: (callback: (state: MarketState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: MarketState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(MARKET_CHANNELS.stateChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(MARKET_CHANNELS.stateChanged, listener)
+    }
+  },
+  onNavigate: (callback: (page: MarketPage) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      page: MarketPage
+    ): void => {
+      callback(page)
+    }
+    ipcRenderer.on(MARKET_CHANNELS.navigate, listener)
+    return () => {
+      ipcRenderer.removeListener(MARKET_CHANNELS.navigate, listener)
+    }
+  }
+}
+
+const api = { alarms, market }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

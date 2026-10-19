@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>行情看板 产品需求文档（PRD）</title>
+    <style>
+      :root {
+        --ink: #1a1d21;
+        --ink-2: #4a5058;
+        --ink-3: #6b7280;
+        --line: #e5e7eb;
+        --line-2: #f1f3f5;
+        --bg: #ffffff;
+        --bg-2: #f8f9fa;
+        --accent: #1f4ed8;
+        --up: #d92d20;
+        --down: #12805c;
+        --warn: #b45309;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font-size: 15px;
+        line-height: 1.75;
+      }
+      .page { max-width: 960px; margin: 0 auto; padding: 56px 32px 96px; }
+      .doc-head { border-bottom: 2px solid var(--ink); padding-bottom: 20px; }
+      .doc-head h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.4px; }
+      .doc-head .sub { color: var(--ink-3); font-size: 13px; }
+      .meta {
+        display: flex; flex-wrap: wrap; gap: 8px 28px;
+        margin: 18px 0 0; padding: 14px 0 0;
+        border-top: 1px solid var(--line-2);
+        font-size: 13px; color: var(--ink-2);
+      }
+      .meta b { color: var(--ink); font-weight: 600; }
+      h2 {
+        font-size: 21px; margin: 52px 0 16px; padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      h3 { font-size: 17px; margin: 32px 0 10px; }
+      h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+      p { margin: 10px 0; }
+      ul, ol { margin: 10px 0; padding-left: 22px; }
+      li { margin: 5px 0; }
+      code {
+        background: var(--bg-2); border: 1px solid var(--line-2);
+        border-radius: 4px; padding: 1px 5px; font-size: 13px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      table {
+        width: 100%; border-collapse: collapse; margin: 14px 0 18px;
+        font-size: 14px;
+      }
+      th, td {
+        border: 1px solid var(--line); padding: 9px 11px;
+        text-align: left; vertical-align: top;
+      }
+      th { background: var(--bg-2); font-weight: 600; white-space: nowrap; }
+      .tag {
+        display: inline-block; font-size: 12px; line-height: 1.6;
+        padding: 0 7px; border-radius: 4px; border: 1px solid var(--line);
+        background: var(--bg-2); color: var(--ink-2); white-space: nowrap;
+      }
+      .tag-tbd { color: var(--warn); border-color: #f2d9a8; background: #fdf7ec; }
+      .tag-p0 { color: #fff; background: var(--accent); border-color: var(--accent); }
+      .tag-p1 { color: var(--accent); border-color: #c3d0f4; background: #f2f5fd; }
+      .up { color: var(--up); font-weight: 600; }
+      .down { color: var(--down); font-weight: 600; }
+      .note {
+        border-left: 3px solid var(--accent); background: var(--bg-2);
+        padding: 12px 16px; margin: 16px 0; font-size: 14px;
+      }
+      .flow {
+        background: var(--bg-2); border: 1px solid var(--line);
+        border-radius: 8px; padding: 18px 20px; margin: 16px 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px; line-height: 2; white-space: pre-wrap;
+        color: var(--ink-2);
+      }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+      .card {
+        border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+        background: var(--bg);
+      }
+      .card h4 { margin-top: 0; }
+      .muted { color: var(--ink-3); font-size: 13px; }
+      footer {
+        margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line);
+        color: var(--ink-3); font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="doc-head">
+        <h1>行情看板 产品需求文档（PRD）</h1>
+        <div class="sub">现有桌面应用（定时提醒）新增「行情」模块</div>
+        <div class="meta">
+          <span><b>版本</b> v1.0</span>
+          <span><b>日期</b> 2026-10-14</span>
+          <span><b>范围</b> 新模块 / 中等深度</span>
+          <span><b>状态</b> 待评审</span>
+        </div>
+      </header>
+
+      <h2>1. 背景与目标</h2>
+      <p>
+        用户在工作时会短暂查看大盘与少量自选股的涨跌。当前做法是打开行情网站或独立客户端，
+        成本高、占资源，且极易被浏览器标签淹没；同时用户已有的桌面应用长期常驻托盘，
+        具备承载「随时瞄一眼」的条件。
+      </p>
+      <p>
+        受影响用户与场景：单人使用本机桌面应用的个人投资者，在盘中需要快速确认
+        上证等核心指数与自选股的最新表现，不需要登录、不需要切换窗口。
+      </p>
+      <p>
+        产品决策：在现有应用中新增「行情」页面，复用现有常驻托盘能力，
+        把核心指数与自选股集中在一个自动刷新的面板中，并按 A 股交易时段智能启停请求。
+      </p>
+      <p>预期可观察结果：</p>
+      <ul>
+        <li>用户不离开当前应用即可看到 3 个核心指数与自选股的现价、涨跌幅与更新时间。</li>
+        <li>非交易时段不再发起无意义的行情请求，页面明确显示休市状态与下一次开盘时间。</li>
+        <li>行情获取失败时用户看到的是「上次成功数据 + 失败标记 + 重试中」，而不是空白或错误弹窗。</li>
+        <li>窗口关闭后仍可在托盘悬浮提示中看到上证指数。</li>
+      </ul>
+
+      <h2>2. 范围</h2>
+
+      <h3>2.1 P0 — 最小完整闭环</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>能力</th><th>完成证据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0-1</td>
+            <td>进入「行情」页显示上证指数、深证成指、创业板指三张指数卡片（点位、涨跌额、涨跌幅、更新时间）</td>
+            <td>三张卡片均渲染出数值与涨跌幅，且带有最近更新时间</td>
+          </tr>
+          <tr>
+            <td>P0-2</td>
+            <td>手动输入 6 位代码添加自选股，添加成功后进入列表；可删除</td>
+            <td>添加/删除后列表即时变化，重启应用后仍保持一致</td>
+          </tr>
+          <tr>
+            <td>P0-3</td>
+            <td>自选股列表按设定节奏自动刷新，展示现价、涨跌额、涨跌幅、今开、最高、最低、成交额、更新时间</td>
+            <td>交易时段内数值随时间变化，表头显示统一更新时间戳</td>
+          </tr>
+          <tr>
+            <td>P0-4</td>
+            <td>交易时段内每 3 秒刷新；非交易时段自动暂停并显示休市状态与下一次开盘时间</td>
+            <td>收盘后不再有周期性请求，页面出现休市提示</td>
+          </tr>
+          <tr>
+            <td>P0-5</td>
+            <td>刷新失败时保留上次成功数据，显示失败标记并自动重试</td>
+            <td>断网时数据不被清空，出现失败标记，恢复网络后自动回到最新数据</td>
+          </tr>
+          <tr>
+            <td>P0-6</td>
+            <td>托盘悬浮提示显示上证指数点位与涨跌幅</td>
+            <td>窗口关闭后悬浮托盘图标可见上证指数简况</td>
+          </tr>
+          <tr>
+            <td>P0-7</td>
+            <td>自选股与页面设置本地持久化</td>
+            <td>重启后自选股顺序与开关状态不变</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>2.2 P1 — 本轮纳入设计，不阻塞 P0</h3>
+      <ul>
+        <li>手动「立即刷新」与「暂停/恢复自动刷新」开关。</li>
+        <li>自选股拖拽排序与置顶。</li>
+        <li>一键复制股票代码、跳转到外部行情页。</li>
+        <li>表格列显隐与紧凑/宽松密度切换。</li>
+      </ul>
+
+      <h3>2.3 本轮不做（明确排除）</h3>
+      <ul>
+        <li>K 线图、分时图与技术指标。</li>
+        <li>板块、涨跌榜、资金流、龙虎榜、板块轮动。</li>
+        <li>港股、美股、基金、可转债、期货。</li>
+        <li>新闻、公告、财务报表。</li>
+        <li>到价提醒（可作为后续独立需求，本模块不预留入口）。</li>
+      </ul>
+
+      <h2>3. 产品模型与核心流程</h2>
+      <div class="grid2">
+        <div class="card">
+          <h4>角色与权限</h4>
+          <p class="muted">
+            仅「本机用户」单一角色。无登录、无多用户、无权限差异，
+            所有数据的可见者可操作者均为本机使用者本人。
+          </p>
+        </div>
+        <div class="card">
+          <h4>核心对象</h4>
+          <p class="muted">
+            自选股（WatchItem）：用户主动维护的关注列表项，以股票代码唯一标识，
+            是行情列表、刷新调度与持久化的共同对象。
+          </p>
+        </div>
+      </div>
+
+      <h4>进入条件 / 完成条件 / 恢复路径</h4>
+      <table>
+        <tbody>
+          <tr>
+            <th>进入条件</th>
+            <td>用户在应用内切换到「行情」页。</td>
+          </tr>
+          <tr>
+            <th>完成条件</th>
+            <td>指数卡片与自选股列表均展示「数值 + 相对昨收的涨跌幅 + 最近更新时间」，且该更新时间不早于最近一个刷新周期。</td>
+          </tr>
+          <tr>
+            <th>主要失败与恢复</th>
+            <td>行情请求失败 → 保留上次成功数据并展示失败标记，系统自动重试，用户无需任何操作即可恢复。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>核心流程</h4>
+      <div class="flow">打开应用
+  └─ 切换到「行情」页
+      ├─ 读取本地自选股与页面设置
+      ├─ 判断当前是否交易时段
+      │   ├─ 是 → 拉取指数与自选股行情 → 渲染 → 每 3 秒重复
+      │   └─ 否 → 停止周期请求 → 展示休市状态与下一次开盘时间
+      │            → 距下一次开盘 1 分钟时自动恢复刷新
+      └─ 无自选股 → 展示空状态与「添加自选股」入口
+
+应用常驻托盘
+  └─ 独立于页面，按固定节奏更新托盘悬浮提示中的上证指数</div>
+
+      <h2>4. 功能需求</h2>
+
+      <h3>FR-M1 大盘指数卡片 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr><th>目的</th><td>让用户进入页面第一眼就能判断大盘方向。</td></tr>
+          <tr>
+            <th>布局</th>
+            <td>页面顶部横向排列三张等宽卡片，顺序固定为：上证指数、深证成指、创业板指。<br />
+              每张卡片自上而下为：指数名称、当前点位、涨跌额与涨跌幅（同一行，方向着色）、更新时间。</td>
+          </tr>
+          <tr>
+            <th>触发</th>
+            <td>进入「行情」页即渲染；此后随刷新节奏更新（见 FR-M4）。</td>
+          </tr>
+          <tr>
+            <th>处理规则</th>
+            <td>数值与着色规则统一遵循「共享规则 R2」；指数点位保留 2 位小数；
+              涨跌额与涨跌幅跟随同一方向着色，涨跌幅保留 2 位小数并带正负号。</td>
+          </tr>
+          <tr>
+            <th>结果与状态变化</th>
+            <td>刷新成功时原地更新数值与时间戳，不重新挂载卡片、不闪烁、不改变卡片顺序。</td>
+          </tr>
+          <tr>
+            <th>异常</th>
+            <td>刷新失败：保留上一组数值，卡片右上角出现失败标记，更新时间保持为上次成功时间（见 FR-M4 与共享规则 R3）。<br />
+              数据缺失（如接口未返回某指数）：该卡片数值显示 <code>--</code>，不影响其余卡片。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>FR-M2 自选股列表 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr><th>目的</th><td>集中查看用户主动关注个股的实时表现。</td></tr>
+          <tr>
+            <th>布局</th>
+            <td>指数卡片下方为表格，列固定为：名称、代码、现价、涨跌额、涨跌幅、今开、最高、最低、成交额、更新时间。<br />
+              表头区域展示全局状态（刷新中 / 已更新 HH:mm:ss / 刷新失败 / 已休市）。</td>
+          </tr>
+          <tr>
+            <th>触发</th>
+            <td>页面加载、自选股增删、刷新节奏到达时更新。</td>
+          </tr>
+          <tr>
+            <th>处理规则</th>
+            <td>默认排序按加入时间正序；P1 支持拖拽排序与置顶（置顶项固定排在最前，排序结果持久化）。<br />
+              数值显示与着色遵循共享规则 R2；成交额以「亿/万」自适应单位展示。</td>
+          </tr>
+          <tr>
+            <th>结果与状态变化</th>
+            <td>仅原地更新单元格内容，表格不整表重绘；用户已勾选的排序结果不因刷新而改变。</td>
+          </tr>
+          <tr>
+            <th>空状态</th>
+            <td>无自选股时展示空状态：一句说明文案 + 「添加自选股」主按钮，不展示空表格骨架。</td>
+          </tr>
+          <tr>
+            <th>异常</th>
+            <td>个别股票无数据（停牌、退市整理、代码非法）时，该行行情列显示 <code>--</code>，并在名称旁显示状态说明；不隐藏该行，不阻塞其余行刷新。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>FR-M3 添加与删除自选股 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr>
+            <th>触发</th>
+            <td>用户在「行情」页点击「添加自选股」打开输入弹窗；每行行尾提供删除入口。</td>
+          </tr>
+          <tr>
+            <th>输入方式</th>
+            <td>仅支持手动输入 6 位数字股票代码（本轮不提供名称搜索与联想选择）。</td>
+          </tr>
+          <tr>
+            <th>处理规则</th>
+            <td>提交前先按共享规则 R4 校验代码格式与市场归属；校验通过后请求该股行情，
+              成功则写入自选股并关闭弹窗；行情请求成功即视为「股票存在」的唯一判定依据。</td>
+          </tr>
+          <tr>
+            <th>结果与状态变化</th>
+            <td>添加成功后该股出现在列表末尾（或 P1 指定位置），名称使用接口返回的股票名称并本地缓存；<br />
+              删除时执行二次确认（确认文案含股票名称与代码），确认后立即从列表移除并持久化。</td>
+          </tr>
+          <tr>
+            <th>校验与异常</th>
+            <td>非 6 位数字 → 内联提示「请输入 6 位股票代码」。<br />
+              代码不存在或接口无数据 → 内联提示「未找到该股票，请检查代码」，弹窗保持打开，输入内容保留。<br />
+              重复添加 → 提示「该股票已在自选股中」，并将列表中对应行高亮 2 秒。<br />
+              添加过程中请求超时 → 提示「暂时无法获取行情，请稍后重试」，不写入自选股。</td>
+          </tr>
+          <tr>
+            <th>删除异常</th>
+            <td>删除时若正在刷新，先本地移除再更新视图；刷新返回结果中包含已删除代码时忽略该结果，不重新插入。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>FR-M4 行情刷新与交易时段调度 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr>
+            <th>目的</th>
+            <td>在保证「看到的是最新价」的同时，避免非交易时段的无效请求与接口限流。</td>
+          </tr>
+          <tr>
+            <th>刷新节奏</th>
+            <td>交易时段内每 3 秒刷新一次，指数与自选股在同一轮请求中一并获取。<br />
+              非交易时段（含午休、收盘后、周末、休市日）不发起周期请求。</td>
+          </tr>
+          <tr>
+            <th>时段判定</th>
+            <td>遵循共享规则 R1；页面需显示「已休市」与下一次开盘时间。</td>
+          </tr>
+          <tr>
+            <th>调度行为</th>
+            <td>同一时刻只允许一轮请求在途，若上一轮未返回则本轮跳过，不并发堆积。<br />
+              距下一次开盘 1 分钟时自动恢复周期请求，无需用户手动操作。</td>
+          </tr>
+          <tr>
+            <th>手动操作</th>
+            <td>P1 提供「立即刷新」与「暂停/恢复自动刷新」；暂停状态下表头显示「已暂停」，恢复后按节奏继续。</td>
+          </tr>
+          <tr>
+            <th>失败与退避</th>
+            <td>遵循共享规则 R3：单次失败不清空数据、不弹窗；连续失败达阈值后自动降频，恢复正常后回到 3 秒。</td>
+          </tr>
+          <tr>
+            <th>状态变化</th>
+            <td>表头状态在「刷新中 / 已更新 / 刷新失败 / 已休市 / 已暂停」之间切换，切换时仅更新文案与时间戳。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>FR-M5 托盘指数展示 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr><th>目的</th><td>窗口关闭或收起后，仍能一眼看到大盘方向。</td></tr>
+          <tr>
+            <th>展示内容</th>
+            <td>托盘悬浮提示显示：上证指数点位 + 涨跌幅。格式示例：<code>上证指数 3245.67 +0.52%</code>。</td>
+          </tr>
+          <tr>
+            <th>更新节奏</th>
+            <td>交易时段内按固定节奏更新（默认 10 秒 <span class="tag tag-tbd">[假设, TBD]</span>，独立于页面的 3 秒刷新，避免过于频繁地更新托盘提示）。<br />
+              非交易时段保留最后一次数据，不显示失败标记。</td>
+          </tr>
+          <tr>
+            <th>结果与状态变化</th>
+            <td>托盘右键菜单保留既有提醒相关项，并新增「打开行情」入口，点击后聚焦窗口并切换到行情页。</td>
+          </tr>
+          <tr>
+            <th>异常</th>
+            <td>托盘获取失败时保持上一次文案不变；连续失败超过阈值后文案退回为「上证指数 --」，不显示错误信息。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>FR-M6 页面入口与整体框架 <span class="tag tag-p0">P0</span></h3>
+      <table>
+        <tbody>
+          <tr><th>目的</th><td>把行情能力并入现有应用而不干扰提醒功能。</td></tr>
+          <tr>
+            <th>布局</th>
+            <td>应用内新增主导航入口「行情」，与既有「提醒」入口并列；切换入口时保留各自页面状态（如滚动位置、暂停开关）。</td>
+          </tr>
+          <tr>
+            <th>规则</th>
+            <td>提醒功能不受行情模块影响：行情页面的刷新、失败与休市均不产生提醒类通知。</td>
+          </tr>
+          <tr>
+            <th>状态保持</th>
+            <td>应用重启后默认进入上次停留的页面；首次使用默认进入「提醒」页。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5. 共享规则与例外</h2>
+
+      <h3>R1 交易时段与休市判定</h3>
+      <table>
+        <thead><tr><th>时段</th><th>判定</th><th>刷新行为</th></tr></thead>
+        <tbody>
+          <tr><td>开盘前（09:30 之前）</td><td>非交易时段</td><td>不请求，显示「距开盘还剩 XX 分钟」</td></tr>
+          <tr><td>上午盘 09:30–11:30</td><td>交易时段</td><td>每 3 秒刷新</td></tr>
+          <tr><td>午间休市 11:30–13:00</td><td>非交易时段</td><td>不请求，显示「午间休市，13:00 恢复」</td></tr>
+          <tr><td>下午盘 13:00–15:00</td><td>交易时段</td><td>每 3 秒刷新</td></tr>
+          <tr><td>收盘后 15:00 之后</td><td>非交易时段</td><td>不请求，显示「已收盘」</td></tr>
+          <tr><td>周六、周日</td><td>非交易时段</td><td>不请求，显示下一交易日开盘时间</td></tr>
+          <tr>
+            <td>法定节假日</td>
+            <td>非交易时段 <span class="tag tag-tbd">[假设, TBD]</span></td>
+            <td>MVP 依据「接口数据时间戳停滞」识别为休市并停止请求；是否引入节假日日历见第 8 节</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">
+        交易日以本机时区（Asia/Shanghai）为准；系统时间被手动调整时，
+        交易时段判定以调整后的本机时间为准。
+      </p>
+
+      <h3>R2 数值计算与颜色规则</h3>
+      <table>
+        <thead><tr><th>项</th><th>规则</th></tr></thead>
+        <tbody>
+          <tr><td>涨跌额</td><td>现价 − 昨收，保留 2 位小数，带正负号</td></tr>
+          <tr><td>涨跌幅</td><td>（现价 − 昨收）÷ 昨收 × 100%，保留 2 位小数，带正负号</td></tr>
+          <tr><td>颜色</td><td>默认「红涨绿跌」（A 股习惯）：涨为红色，跌为绿色，平盘（0.00%）为中性色；本轮不提供配色切换 <span class="tag tag-tbd">[假设, TBD]</span></td></tr>
+          <tr><td>缺失值</td><td>任一数值缺失时统一显示 <code>--</code>，不显示 0，不参与涨跌着色</td></tr>
+          <tr><td>成交额单位</td><td>小于 1 亿显示「万元」并保留 0 位小数；大于等于 1 亿显示「亿元」并保留 2 位小数</td></tr>
+          <tr><td>时间戳</td><td>统一格式 <code>HH:mm:ss</code>，取本轮成功响应的数据时间；全页共用一个时间戳，不逐行显示不同时间</td></tr>
+        </tbody>
+      </table>
+
+      <h3>R3 刷新失败与退避</h3>
+      <ul>
+        <li>单次请求失败：保留上一次成功数据，表头出现失败标记，并记录失败时间；不弹窗、不发送系统通知。</li>
+        <li>连续失败达到 3 次：周期从 3 秒退避为 30 秒，标记文案提示「网络异常，重试中」。</li>
+        <li>任一次请求成功：立即恢复正常节奏（3 秒）并清除失败标记。</li>
+        <li>应用启动时若网络不可用：页面进入「加载失败」状态，展示重试入口与上次本地数据（若存在）。</li>
+        <li>用户可见要求：任何失败状态下，页面必须仍能看到「上次成功时间」，不允许出现无信息的空白区域。</li>
+      </ul>
+
+      <h3>R4 代码规范化与市场归属</h3>
+      <table>
+        <thead><tr><th>代码前缀</th><th>市场</th><th>本轮支持</th></tr></thead>
+        <tbody>
+          <tr><td>6 / 9</td><td>上海（沪市）</td><td>支持</td></tr>
+          <tr><td>0 / 3</td><td>深圳（深市）</td><td>支持</td></tr>
+          <tr><td>8 / 4</td><td>北京（北交所）</td><td><span class="tag tag-tbd">TBD</span> 见第 8 节</td></tr>
+          <tr><td>其他</td><td>—</td><td>视为非法代码，拒绝添加</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">代码前导零含义固定，不使用带市场前缀的输入格式；同一代码在同一自选股列表中唯一。</p>
+
+      <h3>R5 本地持久化与隐私</h3>
+      <ul>
+        <li>持久化内容：自选股列表（代码、市场、名称缓存、加入时间、排序）、页面设置（暂停开关、密度、停留页面）。</li>
+        <li>不持久化行情数值与历史曲线；重启后行情以最新一次请求结果为准。</li>
+        <li>所有数据仅存于本机，不上传、不共享；不使用任何用户身份信息。</li>
+      </ul>
+
+      <h3>R6 数据时效与免责边界</h3>
+      <ul>
+        <li>行情来自免费公开数据源，可能存在秒级至分钟级延迟，且非交易所逐笔级数据；产品定位为「看盘参考」，不作为交易依据。</li>
+        <li>页面底部固定展示一行数据来源与延迟说明（不做弹窗、不打断使用）。</li>
+        <li>是否需要在首次进入时展示一次完整免责声明：见第 8 节 <span class="tag tag-tbd">[TBD]</span>。</li>
+      </ul>
+
+      <h2>6. 字段定义</h2>
+
+      <h3>6.1 自选股对象（WatchItem）</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>代码 code</td><td>字符串，6 位数字</td><td>是</td><td>唯一标识；重复添加被拒绝</td></tr>
+          <tr><td>市场 market</td><td>枚举：沪 / 深（北交所 TBD）</td><td>是</td><td>由代码前缀推导，不接受用户指定</td></tr>
+          <tr><td>名称 name</td><td>字符串</td><td>是</td><td>首次添加成功时由行情数据获取并缓存，之后随刷新更新</td></tr>
+          <tr><td>加入时间 addedAt</td><td>时间戳</td><td>是</td><td>默认排序依据</td></tr>
+          <tr><td>排序值 sortOrder</td><td>数字</td><td>否</td><td>P1 拖拽排序后写入</td></tr>
+        </tbody>
+      </table>
+
+      <h3>6.2 行情展示字段</h3>
+      <table>
+        <thead><tr><th>字段</th><th>展示位置</th><th>格式</th><th>缺失时</th></tr></thead>
+        <tbody>
+          <tr><td>现价</td><td>卡片 / 列表</td><td>2 位小数</td><td><code>--</code></td></tr>
+          <tr><td>涨跌额</td><td>卡片 / 列表</td><td>2 位小数 + 正负号</td><td><code>--</code></td></tr>
+          <tr><td>涨跌幅</td><td>卡片 / 列表 / 托盘</td><td>2 位小数 + 正负号 + %</td><td><code>--</code></td></tr>
+          <tr><td>今开 / 最高 / 最低</td><td>列表</td><td>2 位小数</td><td><code>--</code></td></tr>
+          <tr><td>成交额</td><td>列表</td><td>万/亿自适应</td><td><code>--</code></td></tr>
+          <tr><td>数据时间</td><td>表头 / 卡片</td><td><code>HH:mm:ss</code></td><td>保留上次成功时间</td></tr>
+        </tbody>
+      </table>
+
+      <h2>7. 状态与边界情况</h2>
+
+      <h3>7.1 页面状态机</h3>
+      <table>
+        <thead><tr><th>状态</th><th>触发条件</th><th>界面表现</th><th>可切换到</th></tr></thead>
+        <tbody>
+          <tr><td>加载中</td><td>首次进入且无本地缓存</td><td>骨架占位 + 「正在获取行情」</td><td>已更新 / 加载失败 / 已休市</td></tr>
+          <tr><td>已更新</td><td>最近一轮请求成功</td><td>数值 + <code>已更新 HH:mm:ss</code></td><td>刷新中 / 刷新失败 / 已休市 / 已暂停</td></tr>
+          <tr><td>刷新中</td><td>有请求在途</td><td>表头轻微指示，不清空既有数值</td><td>已更新 / 刷新失败</td></tr>
+          <tr><td>刷新失败</td><td>连续失败 ≥ 1 次</td><td>保留旧值 + 失败标记 + 上次成功时间</td><td>已更新（恢复）/ 加载失败</td></tr>
+          <tr><td>加载失败</td><td>启动时无可展示数据且请求失败</td><td>错误说明 + 重试按钮</td><td>加载中</td></tr>
+          <tr><td>已休市</td><td>当前时间在交易时段外</td><td>休市文案 + 下一次开盘时间，停止请求</td><td>刷新中（到达下一交易时段）</td></tr>
+          <tr><td>已暂停</td><td>用户暂停自动刷新（P1）</td><td>表头「已暂停」+ 手动刷新入口</td><td>已更新</td></tr>
+        </tbody>
+      </table>
+
+      <h3>7.2 必须覆盖的边界与异常</h3>
+      <table>
+        <thead><tr><th>场景</th><th>产品行为</th></tr></thead>
+        <tbody>
+          <tr><td>自选股为空</td><td>展示空状态与添加入口，不展示空表格；指数卡片照常显示</td></tr>
+          <tr><td>添加重复代码</td><td>提示已存在并高亮既有行，不新增重复项</td></tr>
+          <tr><td>添加不存在的代码</td><td>内联报错，弹窗保持打开且保留输入</td></tr>
+          <tr><td>停牌 / 无数据个股</td><td>该行显示 <code>--</code> 与状态说明，不隐藏、不阻塞其他行</td></tr>
+          <tr><td>断网</td><td>保留旧值 + 失败标记 + 自动退避重试；不弹窗、不通知</td></tr>
+          <tr><td>刷新过程中删除个股</td><td>已删除的行不被刷新结果重新插入</td></tr>
+          <tr><td>跨午休 / 跨收盘</td><td>到时自动停止请求并切换为休市状态；下一时段开始前 1 分钟自动恢复</td></tr>
+          <tr><td>系统时间被修改</td><td>以修改后的本机时间重新判定时段，允许出现一次状态跳变</td></tr>
+          <tr><td>托盘连续失败</td><td>托盘文案退化为 <code>上证指数 --</code>，不显示错误详情</td></tr>
+        </tbody>
+      </table>
+
+      <h2>8. 待决问题</h2>
+      <table>
+        <thead><tr><th>#</th><th>问题</th><th>影响</th><th>当前处理</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Q1</td>
+            <td>法定节假日的休市判断方式</td>
+            <td>影响是否会在节假日发起无意义请求、休市文案是否准确</td>
+            <td>MVP 采用「数据时间戳停滞」判定 <span class="tag tag-tbd">[假设, TBD]</span>，是否引入节假日日历待定</td>
+          </tr>
+          <tr>
+            <td>Q2</td>
+            <td>是否支持北交所代码（8 / 4 开头）</td>
+            <td>影响代码校验规则与可添加范围</td>
+            <td><span class="tag tag-tbd">TBD</span>，默认仅支持沪深</td>
+          </tr>
+          <tr>
+            <td>Q3</td>
+            <td>首次进入是否展示一次完整数据免责声明</td>
+            <td>影响首屏流程长度</td>
+            <td><span class="tag tag-tbd">TBD</span>，MVP 仅在页面底部常驻一行说明</td>
+          </tr>
+          <tr>
+            <td>Q4</td>
+            <td>托盘悬浮提示刷新频率</td>
+            <td>影响请求量与托盘文案实时性</td>
+            <td>暂定 10 秒 <span class="tag tag-tbd">[假设, TBD]</span></td>
+          </tr>
+          <tr>
+            <td>Q5</td>
+            <td>P0 固定 3 秒刷新，是否开放用户自定义间隔</td>
+            <td>影响设置项与限流风险</td>
+            <td>P0 固定 3 秒；自定义间隔视作 P1 候选 <span class="tag tag-tbd">[TBD]</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>9. 术语表</h2>
+      <table>
+        <thead><tr><th>术语</th><th>定义</th></tr></thead>
+        <tbody>
+          <tr><td>指数卡片</td><td>页面顶部固定展示上证指数、深证成指、创业板指的概览卡片，非用户可自定义列表</td></tr>
+          <tr><td>自选股</td><td>用户手动添加、在本机持久化的关注股票集合，本模块的共享核心对象</td></tr>
+          <tr><td>交易时段</td><td>09:30–11:30 与 13:00–15:00 的交易日盘中区间，见共享规则 R1</td></tr>
+          <tr><td>休市</td><td>非交易时段（含午休、收盘后、周末、节假日）的统一状态，此时不发起周期请求</td></tr>
+          <tr><td>数据时间戳</td><td>最近一次成功响应中的行情时间，用于判断数据新鲜度与识别异常休市</td></tr>
+        </tbody>
+      </table>
+
+      <footer>
+        本文档描述产品行为与业务规则，不含技术选型、接口细节与实现方案。
+        标注 <span class="tag tag-tbd">[TBD]</span> / <span class="tag tag-tbd">[假设, TBD]</span> 的条目需在评审中确认。
+      </footer>
+    </div>
+  </body>
+</html>

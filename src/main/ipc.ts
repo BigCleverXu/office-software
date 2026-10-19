@@ -4,6 +4,16 @@ import { ALARM_CHANNELS } from '../shared/types'
 import type { AlarmDraft } from '../shared/types'
 import type { AlarmStore } from './alarm-store'
 import type { AlarmScheduler } from './scheduler'
+import {
+  MARKET_CHANNELS,
+  normalizeCode,
+  type AddWatchResult,
+  type MarketPage,
+  type MarketState
+} from '../shared/market'
+import type { MarketStore } from './market-store'
+import type { MarketScheduler } from './market-scheduler'
+import { fetchQuotes } from './quote-provider'
 
 export interface AlarmIpcDeps {
   store: AlarmStore
@@ -57,6 +67,101 @@ export function registerAlarmIpc(deps: AlarmIpcDeps): void {
       const updated = store.setEnabled(id, enabled)
       broadcast()
       return updated
+    }
+  )
+}
+
+export interface MarketIpcDeps {
+  store: MarketStore
+  scheduler: MarketScheduler
+  getWindow: () => BrowserWindow | null
+}
+
+/**
+ * 注册行情相关的 IPC 通道。每次自选股 / 设置变更后把最新状态广播给渲染进程。
+ *
+ * 调度器通过 getWatchlist / getSettings 回调读取最新数据，因此无需额外重新调度。
+ */
+export function registerMarketIpc(deps: MarketIpcDeps): void {
+  const { store, scheduler, getWindow } = deps
+
+  const buildState = (): MarketState => ({
+    snapshot: scheduler.getSnapshot(),
+    watchlist: store.getWatchlist(),
+    settings: store.getSettings()
+  })
+
+  const broadcast = (): void => {
+    getWindow()?.webContents.send(MARKET_CHANNELS.stateChanged, buildState())
+  }
+
+  ipcMain.handle(MARKET_CHANNELS.getState, () => buildState())
+
+  ipcMain.handle(
+    MARKET_CHANNELS.addWatch,
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      code: string
+    ): Promise<AddWatchResult> => {
+      const normalized = normalizeCode(code)
+      if (!normalized) {
+        return { ok: false, reason: 'invalid-code' }
+      }
+      const { code: pureCode, symbol, market } = normalized
+      if (store.has(symbol)) {
+        return { ok: false, reason: 'duplicate' }
+      }
+      // 用行情请求校验代码是否真实存在；超时 / 网络异常视为不可用
+      const quotes = await fetchQuotes([symbol], { timeoutMs: 5000 }).catch(
+        () => null
+      )
+      if (!quotes) {
+        return { ok: false, reason: 'unavailable' }
+      }
+      const quote = quotes[0]
+      if (!quote || quote.missing || !quote.name) {
+        return { ok: false, reason: 'not-found' }
+      }
+      const item = store.addWatch({
+        code: pureCode,
+        symbol,
+        market,
+        name: quote.name
+      })
+      // 不 await，避免阻塞添加弹窗关闭
+      void scheduler.refreshNow()
+      broadcast()
+      return { ok: true, item }
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.removeWatch,
+    (_event: Electron.IpcMainInvokeEvent, symbol: string) => {
+      const list = store.removeWatch(symbol)
+      broadcast()
+      return list
+    }
+  )
+
+  ipcMain.handle(MARKET_CHANNELS.refreshNow, async () => {
+    await scheduler.refreshNow()
+  })
+
+  ipcMain.handle(
+    MARKET_CHANNELS.setPaused,
+    (_event: Electron.IpcMainInvokeEvent, paused: boolean) => {
+      store.setPaused(paused)
+      scheduler.reevaluate()
+      broadcast()
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.setLastPage,
+    (_event: Electron.IpcMainInvokeEvent, page: MarketPage) => {
+      store.setLastPage(page)
+      broadcast()
     }
   )
 }

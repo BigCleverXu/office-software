@@ -3,13 +3,14 @@ import { Menu, nativeImage, Tray } from 'electron'
 
 export interface TrayOptions {
   showWindow: () => void
+  openMarket: () => void
   quit: () => void
   iconPath?: string
 }
 
 /** 创建系统托盘；调用方需保持返回实例的引用以避免被 GC */
 export function createTray(options: TrayOptions): Tray {
-  const { showWindow, quit, iconPath } = options
+  const { showWindow, openMarket, quit, iconPath } = options
 
   let icon = nativeImage.createEmpty()
   if (iconPath && existsSync(iconPath)) {
@@ -24,6 +25,7 @@ export function createTray(options: TrayOptions): Tray {
 
   const menu = Menu.buildFromTemplate([
     { label: '显示主窗口', click: () => showWindow() },
+    { label: '打开行情', click: () => openMarket() },
     { type: 'separator' },
     { label: '退出', click: () => quit() }
   ])

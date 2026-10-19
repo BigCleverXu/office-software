@@ -5,9 +5,19 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { ALARM_CHANNELS } from '../shared/types'
 import type { Alarm } from '../shared/types'
+import {
+  FAILURE_THRESHOLD,
+  MARKET_CHANNELS,
+  formatPercent,
+  formatPrice,
+  type Quote
+} from '../shared/market'
 import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
-import { registerAlarmIpc } from './ipc'
+import { MarketStore } from './market-store'
+import { MarketScheduler } from './market-scheduler'
+import { registerAlarmIpc, registerMarketIpc } from './ipc'
+import { fetchQuotes } from './quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
 import { getIntervalMs } from '../shared/interval'
@@ -15,6 +25,10 @@ import { getIntervalMs } from '../shared/interval'
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let scheduler: AlarmScheduler | null = null
+let marketSchedulerRef: MarketScheduler | null = null
+let trayTooltipTimer: ReturnType<typeof setInterval> | null = null
+/** 缓存最后一次有效的上证指数，供非交易时段复用 */
+let lastShanghai: Quote | null = null
 let isQuitting = false
 
 function createWindow(): void {
@@ -122,15 +136,70 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
+  const marketStore = new MarketStore()
+
+  /** 把最新行情状态推给渲染层（读取的是 store / 调度器的最新值） */
+  const pushMarketState = (): void => {
+    mainWindow?.webContents.send(MARKET_CHANNELS.stateChanged, {
+      snapshot: marketScheduler.getSnapshot(),
+      watchlist: marketStore.getWatchlist(),
+      settings: marketStore.getSettings()
+    })
+  }
+
+  /** 按 PRD FR-M5：以 10 秒节奏刷新托盘悬浮提示 */
+  const refreshTrayTooltip = (): void => {
+    const snapshot = marketScheduler.getSnapshot()
+    const shanghai = snapshot.indices.find((item) => item.symbol === 'sh000001')
+    // 缓存最后一次有效数据，非交易时段因此也保留
+    if (shanghai && shanghai.missing === false && shanghai.price !== null) {
+      lastShanghai = shanghai
+    }
+    const current = lastShanghai
+    // 连续失败超过阈值后退化为占位文案，不显示错误详情
+    const degraded = snapshot.failureCount >= FAILURE_THRESHOLD
+    let text = '上证指数 --'
+    if (current && !degraded) {
+      const priceText = formatPrice(current.price)
+      const percentText = formatPercent(current.changePercent)
+      text = `上证指数 ${priceText} ${percentText}`
+    }
+    tray?.setToolTip(text)
+  }
+
+  const marketScheduler = new MarketScheduler({
+    fetchQuotes: (symbols) => fetchQuotes(symbols),
+    getWatchlist: () => marketStore.getWatchlist(),
+    getSettings: () => marketStore.getSettings(),
+    onSnapshot: () => {
+      pushMarketState()
+      refreshTrayTooltip()
+    }
+  })
+  marketSchedulerRef = marketScheduler
+
+  registerMarketIpc({
+    store: marketStore,
+    scheduler: marketScheduler,
+    getWindow: () => mainWindow
+  })
+
   createWindow()
 
   tray = createTray({
     showWindow: showMainWindow,
+    openMarket: () => {
+      showMainWindow()
+      mainWindow?.webContents.send(MARKET_CHANNELS.navigate, 'market')
+    },
     quit: () => app.quit(),
     iconPath: icon
   })
 
   alarmScheduler.start()
+  marketScheduler.start()
+  refreshTrayTooltip()
+  trayTooltipTimer = setInterval(refreshTrayTooltip, 10000)
 
   app.on('activate', () => {
     showMainWindow()
@@ -140,6 +209,11 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   isQuitting = true
   scheduler?.stop()
+  marketSchedulerRef?.stop()
+  if (trayTooltipTimer !== null) {
+    clearInterval(trayTooltipTimer)
+    trayTooltipTimer = null
+  }
   tray?.destroy()
   tray = null
 })
