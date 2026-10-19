@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  GITEE_OWNER,
-  GITEE_RELEASES_ENDPOINT,
-  GITEE_REPO
+  GITHUB_OWNER,
+  GITHUB_RELEASES_ENDPOINT,
+  GITHUB_REPO
 } from '../shared/update'
 import { fetchLatestRelease } from './release-provider'
 
@@ -32,7 +32,8 @@ function fetchOnce(response: {
 }
 
 const latestPath =
-  `${GITEE_RELEASES_ENDPOINT}/${GITEE_OWNER}` + `/${GITEE_REPO}/releases/latest`
+  `${GITHUB_RELEASES_ENDPOINT}/${GITHUB_OWNER}` +
+  `/${GITHUB_REPO}/releases/latest`
 
 describe('fetchLatestRelease 正常返回', () => {
   it('200 + 合法 JSON 返回规范化后的 ReleaseInfo', async () => {
@@ -58,7 +59,7 @@ describe('fetchLatestRelease 正常返回', () => {
       expect(release?.notes).toBe('修复若干问题')
       expect(release?.publishedAt).toBe('2026-04-14T15:00:00+08:00')
       expect(release?.pageUrl).toBe(
-        `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/tag/v1.2.3`
+        `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v1.2.3`
       )
     }
     expect(fetchImpl).toHaveBeenCalledTimes(1)

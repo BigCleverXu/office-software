@@ -179,7 +179,7 @@ export interface UpdateIpcDeps {
 }
 
 /**
- * 注册检查更新 IPC 通道。职责：对比当前版本与 Gitee 最新发行版，
+ * 注册检查更新 IPC 通道。职责：对比当前版本与 GitHub 最新发行版，
  * 归类为四态结果返回渲染层；任何异常都收敛为 error 结果，绝不抛出。
  */
 export function registerUpdateIpc(deps: UpdateIpcDeps): void {

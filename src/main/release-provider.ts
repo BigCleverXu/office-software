@@ -1,9 +1,9 @@
-// 主进程发行版取数层：请求 Gitee releases/latest 并解析为 ReleaseInfo
+// 主进程发行版取数层：请求 GitHub releases/latest 并解析为 ReleaseInfo
 // 仅主进程使用；渲染层受 CSP 限制不直接发起外部请求
 import {
-  GITEE_OWNER,
-  GITEE_RELEASES_ENDPOINT,
-  GITEE_REPO,
+  GITHUB_OWNER,
+  GITHUB_RELEASES_ENDPOINT,
+  GITHUB_REPO,
   parseRelease,
   type ReleaseInfo,
   type UpdateErrorReason
@@ -56,14 +56,14 @@ export async function fetchLatestRelease(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const url =
-      `${GITEE_RELEASES_ENDPOINT}/${GITEE_OWNER}/${GITEE_REPO}` +
+      `${GITHUB_RELEASES_ENDPOINT}/${GITHUB_OWNER}/${GITHUB_REPO}` +
       '/releases/latest'
     const response = await fetchImpl(url, {
       headers: { Accept: 'application/json' },
       signal: controller.signal
     })
     if (response.status === 404) {
-      // Gitee 无发行版时 /releases/latest 返回 404
+      // GitHub 无发行版时 /releases/latest 返回 404
       return { ok: true, release: null }
     }
     if (!response.ok) {
@@ -71,7 +71,7 @@ export async function fetchLatestRelease(
     }
     try {
       const payload: unknown = await response.json()
-      const release = parseRelease(payload, GITEE_OWNER, GITEE_REPO)
+      const release = parseRelease(payload, GITHUB_OWNER, GITHUB_REPO)
       if (release === null) {
         return { ok: false, reason: 'unknown' }
       }

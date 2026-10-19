@@ -6,3 +6,4 @@ node-compile-cache
 .DS_Store
 .eslintcache
 *.log*
+.trae/

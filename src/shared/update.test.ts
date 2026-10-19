@@ -55,9 +55,9 @@ describe('isNewerVersion', () => {
 })
 
 describe('releasePageUrl', () => {
-  it('拼出 Gitee 发行版页面地址', () => {
-    expect(releasePageUrl('xuyijie_xu', 'office-software', 'v1.0.0')).toBe(
-      'https://gitee.com/xuyijie_xu/office-software/releases/tag/v1.0.0'
+  it('拼出 GitHub 发行版页面地址', () => {
+    expect(releasePageUrl('BigCleverXu', 'office-software', 'v1.0.0')).toBe(
+      'https://github.com/BigCleverXu/office-software/releases/tag/v1.0.0'
     )
   })
 })
@@ -71,7 +71,7 @@ describe('parseRelease', () => {
         body: '更新说明',
         created_at: '2026-01-01T00:00:00+08:00'
       },
-      'xuyijie_xu',
+      'BigCleverXu',
       'office-software'
     )
     expect(result).toEqual({
@@ -81,14 +81,14 @@ describe('parseRelease', () => {
       notes: '更新说明',
       publishedAt: '2026-01-01T00:00:00+08:00',
       pageUrl:
-        'https://gitee.com/xuyijie_xu/office-software/releases/tag/v1.2.0'
+        'https://github.com/BigCleverXu/office-software/releases/tag/v1.2.0'
     })
   })
 
   it('缺 name 时 title 回退为 tag', () => {
     const result = parseRelease(
       { tag_name: 'v1.0.0' },
-      'xuyijie_xu',
+      'BigCleverXu',
       'office-software'
     )
     expect(result?.title).toBe('v1.0.0')
@@ -97,7 +97,7 @@ describe('parseRelease', () => {
   it('缺 body 时 notes 为空字符串', () => {
     const result = parseRelease(
       { tag_name: 'v1.0.0' },
-      'xuyijie_xu',
+      'BigCleverXu',
       'office-software'
     )
     expect(result?.notes).toBe('')
@@ -106,7 +106,7 @@ describe('parseRelease', () => {
   it('缺 created_at 时 publishedAt 为 null', () => {
     const result = parseRelease(
       { tag_name: 'v1.0.0' },
-      'xuyijie_xu',
+      'BigCleverXu',
       'office-software'
     )
     expect(result?.publishedAt).toBeNull()
@@ -114,13 +114,13 @@ describe('parseRelease', () => {
 
   it('缺 tag_name 时返回 null', () => {
     expect(
-      parseRelease({ name: 'x' }, 'xuyijie_xu', 'office-software')
+      parseRelease({ name: 'x' }, 'BigCleverXu', 'office-software')
     ).toBeNull()
   })
 
   it('传入 null / 字符串 / 数字时返回 null', () => {
-    expect(parseRelease(null, 'xuyijie_xu', 'office-software')).toBeNull()
-    expect(parseRelease('text', 'xuyijie_xu', 'office-software')).toBeNull()
-    expect(parseRelease(123, 'xuyijie_xu', 'office-software')).toBeNull()
+    expect(parseRelease(null, 'BigCleverXu', 'office-software')).toBeNull()
+    expect(parseRelease('text', 'BigCleverXu', 'office-software')).toBeNull()
+    expect(parseRelease(123, 'BigCleverXu', 'office-software')).toBeNull()
   })
 })

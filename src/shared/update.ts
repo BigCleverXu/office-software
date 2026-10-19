@@ -6,12 +6,12 @@ export const UPDATE_CHANNELS = {
   check: 'update:check'
 } as const
 
-/** Gitee 仓库归属者 */
-export const GITEE_OWNER = 'xuyijie_xu'
-/** Gitee 仓库名 */
-export const GITEE_REPO = 'office-software'
-/** Gitee 发版 API 基址 */
-export const GITEE_RELEASES_ENDPOINT = 'https://gitee.com/api/v5/repos'
+/** GitHub 仓库归属者 */
+export const GITHUB_OWNER = 'BigCleverXu'
+/** GitHub 仓库名 */
+export const GITHUB_REPO = 'office-software'
+/** GitHub 发版 API 基址 */
+export const GITHUB_RELEASES_ENDPOINT = 'https://api.github.com/repos'
 
 /** 发行版信息 */
 export interface ReleaseInfo {
@@ -87,17 +87,17 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return compareVersions(latest, current) > 0
 }
 
-/** 拼接发行版页面地址（Gitee API 无 html_url 字段） */
+/** 拼接发行版页面地址 */
 export function releasePageUrl(
   owner: string,
   repo: string,
   tag: string
 ): string {
-  return `https://gitee.com/${owner}/${repo}/releases/tag/${tag}`
+  return `https://github.com/${owner}/${repo}/releases/tag/${tag}`
 }
 
 /**
- * 解析 Gitee /releases/latest 的 JSON（字段为 snake_case）。
+ * 解析 GitHub /releases/latest 的 JSON（字段为 snake_case）。
  * 非对象、或 tag_name 缺失/非字符串/为空时返回 null。
  */
 export function parseRelease(
