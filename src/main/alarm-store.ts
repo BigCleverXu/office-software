@@ -1,79 +1,64 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { app } from 'electron'
-import type { Alarm, AlarmDraft } from '../shared/types'
+import type { DatabaseSync } from 'node:sqlite'
+import type {
+  Alarm,
+  AlarmDraft,
+  IntervalUnit,
+  RepeatType,
+  Weekday
+} from '../shared/types'
 import { getIntervalMs } from '../shared/interval'
+import type { AlarmRow } from './database'
 
-/** 补齐缺失字段，兼容旧版本数据 */
-function normalizeAlarm(raw: Partial<Alarm>): Alarm {
+/** 列名与 Alarm 字段之间的转换 */
+function rowToAlarm(row: AlarmRow): Alarm {
+  let weekdays: Weekday[] = []
+  try {
+    weekdays = JSON.parse(row.weekdays) as Weekday[]
+  } catch {
+    weekdays = []
+  }
   return {
-    id: raw.id ?? randomUUID(),
-    label: raw.label ?? '',
-    time: raw.time ?? '',
-    repeat: raw.repeat ?? 'none',
-    weekdays: raw.weekdays ?? [],
-    intervalValue: raw.intervalValue ?? 0,
-    intervalUnit: raw.intervalUnit ?? 'minutes',
-    nextFireAt: raw.nextFireAt ?? null,
-    enabled: raw.enabled ?? true,
-    createdAt: raw.createdAt ?? Date.now(),
-    lastFiredAt: raw.lastFiredAt ?? null
+    id: row.id,
+    label: row.label,
+    time: row.time,
+    repeat: row.repeat as RepeatType,
+    weekdays,
+    intervalValue: row.interval_value,
+    intervalUnit: row.interval_unit as IntervalUnit,
+    nextFireAt: row.next_fire_at,
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    lastFiredAt: row.last_fired_at
   }
 }
 
 /**
  * 提醒的本地持久化存储。
  *
- * 数据以 JSON 数组形式保存在 `app.getPath('userData')/alarms.json`。
- * 为避免单元测试依赖 electron，`app.getPath` 只在需要真实路径时通过
- * 惰性 getter 调用；构造函数也可传入自定义 filePath。
+ * 数据保存在注入的 SQLite 数据库（`alarms` 表）中，由 database.ts
+ * 负责建表与旧数据迁移；本类只做单表读写。
  */
 export class AlarmStore {
-  private readonly explicitPath?: string
-  private alarms: Alarm[] | null = null
+  private readonly db: DatabaseSync
 
-  constructor(filePath?: string) {
-    this.explicitPath = filePath
+  constructor(db: DatabaseSync) {
+    this.db = db
   }
 
-  private get filePath(): string {
-    if (this.explicitPath) {
-      return this.explicitPath
-    }
-    return join(app.getPath('userData'), 'alarms.json')
-  }
-
-  /** 读取内存缓存，首次访问时从磁盘加载（损坏/不存在返回 []） */
-  private load(): Alarm[] {
-    if (this.alarms) {
-      return this.alarms
-    }
-    try {
-      const raw = readFileSync(this.filePath, 'utf-8')
-      const parsed: unknown = JSON.parse(raw)
-      this.alarms = Array.isArray(parsed)
-        ? parsed.map((item) => normalizeAlarm(item as Partial<Alarm>))
-        : []
-    } catch {
-      this.alarms = []
-    }
-    return this.alarms
-  }
-
-  /** 写回磁盘并更新内存缓存 */
-  private persist(list: Alarm[]): void {
-    this.alarms = list
-    try {
-      mkdirSync(dirname(this.filePath), { recursive: true })
-      writeFileSync(this.filePath, JSON.stringify(list, null, 2), 'utf-8')
-    } catch (error) {
-      console.error('保存提醒数据失败:', error)
-    }
+  /** 按 id 读取单条提醒；不存在返回 null */
+  private getById(id: string): Alarm | null {
+    const row = this.db
+      .prepare('SELECT * FROM alarms WHERE id = ?')
+      .get(id) as unknown as AlarmRow | undefined
+    return row ? rowToAlarm(row) : null
   }
 
   getAll(): Alarm[] {
-    return [...this.load()]
+    const rows = this.db
+      .prepare('SELECT * FROM alarms ORDER BY created_at ASC, rowid ASC')
+      .all() as unknown as AlarmRow[]
+    return rows.map((row) => rowToAlarm(row))
   }
 
   create(draft: AlarmDraft): Alarm {
@@ -93,18 +78,36 @@ export class AlarmStore {
       createdAt: Date.now(),
       lastFiredAt: null
     }
-    this.persist([...this.load(), alarm])
+    this.db
+      .prepare(
+        `INSERT INTO alarms (
+          id, label, time, repeat, weekdays, interval_value,
+          interval_unit, next_fire_at, enabled, created_at, last_fired_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        alarm.id,
+        alarm.label,
+        alarm.time,
+        alarm.repeat,
+        JSON.stringify(alarm.weekdays),
+        alarm.intervalValue,
+        alarm.intervalUnit,
+        alarm.nextFireAt,
+        alarm.enabled ? 1 : 0,
+        alarm.createdAt,
+        alarm.lastFiredAt
+      )
     return alarm
   }
 
   update(id: string, draft: AlarmDraft): Alarm | null {
-    const list = this.load()
-    const index = list.findIndex((alarm) => alarm.id === id)
-    if (index === -1) {
+    const current = this.getById(id)
+    if (!current) {
       return null
     }
     const updated: Alarm = {
-      ...list[index],
+      ...current,
       label: draft.label,
       time: draft.time,
       repeat: draft.repeat,
@@ -117,52 +120,62 @@ export class AlarmStore {
           : null,
       enabled: draft.enabled
     }
-    const next = [...list]
-    next[index] = updated
-    this.persist(next)
+    this.db
+      .prepare(
+        `UPDATE alarms SET
+          label = ?, time = ?, repeat = ?, weekdays = ?, interval_value = ?,
+          interval_unit = ?, next_fire_at = ?, enabled = ?
+        WHERE id = ?`
+      )
+      .run(
+        updated.label,
+        updated.time,
+        updated.repeat,
+        JSON.stringify(updated.weekdays),
+        updated.intervalValue,
+        updated.intervalUnit,
+        updated.nextFireAt,
+        updated.enabled ? 1 : 0,
+        id
+      )
     return updated
   }
 
   remove(id: string): void {
-    const list = this.load()
-    const next = list.filter((alarm) => alarm.id !== id)
-    if (next.length !== list.length) {
-      this.persist(next)
-    }
+    this.db.prepare('DELETE FROM alarms WHERE id = ?').run(id)
   }
 
   setEnabled(id: string, enabled: boolean): Alarm | null {
-    const list = this.load()
-    const index = list.findIndex((alarm) => alarm.id === id)
-    if (index === -1) {
+    const current = this.getById(id)
+    if (!current) {
       return null
     }
-    const current = list[index]
     const updated: Alarm = { ...current, enabled }
     if (enabled && current.repeat === 'interval') {
       updated.nextFireAt =
         Date.now() + getIntervalMs(current.intervalValue, current.intervalUnit)
     }
-    const next = [...list]
-    next[index] = updated
-    this.persist(next)
+    this.db
+      .prepare('UPDATE alarms SET enabled = ?, next_fire_at = ? WHERE id = ?')
+      .run(updated.enabled ? 1 : 0, updated.nextFireAt, id)
     return updated
   }
 
   markFired(id: string, at: number, nextFireAt?: number | null): Alarm | null {
-    const list = this.load()
-    const index = list.findIndex((alarm) => alarm.id === id)
-    if (index === -1) {
+    const current = this.getById(id)
+    if (!current) {
       return null
     }
     const updated: Alarm = {
-      ...list[index],
+      ...current,
       lastFiredAt: at,
-      nextFireAt: nextFireAt ?? list[index].nextFireAt
+      nextFireAt: nextFireAt === undefined ? current.nextFireAt : nextFireAt
     }
-    const next = [...list]
-    next[index] = updated
-    this.persist(next)
+    this.db
+      .prepare(
+        'UPDATE alarms SET last_fired_at = ?, next_fire_at = ? WHERE id = ?'
+      )
+      .run(updated.lastFiredAt, updated.nextFireAt, id)
     return updated
   }
 }

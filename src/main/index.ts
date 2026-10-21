@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import type { Tray } from 'electron'
+import type { DatabaseSync } from 'node:sqlite'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -20,6 +21,7 @@ import { registerAlarmIpc, registerMarketIpc, registerUpdateIpc } from './ipc'
 import { fetchQuotes } from './quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
+import { closeDatabase, openDatabase } from './database'
 import { getIntervalMs } from '../shared/interval'
 
 let mainWindow: BrowserWindow | null = null
@@ -30,6 +32,7 @@ let trayTooltipTimer: ReturnType<typeof setInterval> | null = null
 /** 缓存最后一次有效的上证指数，供非交易时段复用 */
 let lastShanghai: Quote | null = null
 let isQuitting = false
+let database: DatabaseSync | null = null
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -102,7 +105,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const store = new AlarmStore()
+  const db = openDatabase()
+  database = db
+
+  const store = new AlarmStore(db)
 
   const broadcast = (): void => {
     mainWindow?.webContents.send(ALARM_CHANNELS.changed, store.getAll())
@@ -136,7 +142,7 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
-  const marketStore = new MarketStore()
+  const marketStore = new MarketStore(db)
 
   /** 把最新行情状态推给渲染层（读取的是 store / 调度器的最新值） */
   const pushMarketState = (): void => {
@@ -218,6 +224,10 @@ app.on('before-quit', () => {
   }
   tray?.destroy()
   tray = null
+  if (database) {
+    closeDatabase(database)
+    database = null
+  }
 })
 
 // 托盘常驻：所有窗口关闭时不退出应用（各平台一致）
