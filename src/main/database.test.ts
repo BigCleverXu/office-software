@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_MODULE } from '../shared/navigation'
 import { closeDatabase, openDatabase, SCHEMA_VERSION } from './database'
@@ -82,20 +82,79 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后三张表存在且版本号为 1', () => {
+  it(':memory: 打开后四张表存在且版本号为 2', () => {
     const db = openTestDatabase({ path: ':memory:' })
-    expect(tableNames(db)).toEqual(['alarms', 'settings', 'watchlist'])
+    expect(tableNames(db)).toEqual(['alarms', 'notes', 'settings', 'watchlist'])
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(1)
+    expect(SCHEMA_VERSION).toBe(2)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
     const dir = makeTempDir()
     const db = openTestDatabase({ path: join(dir, 'test.db') })
-    expect(tableNames(db)).toEqual(['alarms', 'settings', 'watchlist'])
+    expect(tableNames(db)).toEqual(['alarms', 'notes', 'settings', 'watchlist'])
     expect(countRows(db, 'alarms')).toBe(0)
     expect(countRows(db, 'watchlist')).toBe(0)
     expect(countRows(db, 'settings')).toBe(0)
+    expect(countRows(db, 'notes')).toBe(0)
+  })
+})
+
+describe('openDatabase 版本升级', () => {
+  it('v1 数据库升级到 v2 时新增 notes 表且保留原有数据', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v1 数据库（仅 alarms / watchlist / settings）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE alarms (
+  id             TEXT PRIMARY KEY,
+  label          TEXT NOT NULL DEFAULT '',
+  time           TEXT NOT NULL DEFAULT '',
+  repeat         TEXT NOT NULL DEFAULT 'none',
+  weekdays       TEXT NOT NULL DEFAULT '[]',
+  interval_value INTEGER NOT NULL DEFAULT 0,
+  interval_unit  TEXT NOT NULL DEFAULT 'minutes',
+  next_fire_at   INTEGER,
+  enabled        INTEGER NOT NULL DEFAULT 1,
+  created_at     INTEGER NOT NULL,
+  last_fired_at  INTEGER
+);
+CREATE TABLE watchlist (
+  symbol     TEXT PRIMARY KEY,
+  code       TEXT NOT NULL,
+  market     TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  added_at   INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO alarms (id, label, time, created_at)
+        VALUES (?, ?, ?, ?)`
+      )
+      .run('a1', '旧提醒', '08:00', 100)
+    legacy
+      .prepare(
+        `INSERT INTO watchlist (symbol, code, market, added_at)
+        VALUES (?, ?, ?, ?)`
+      )
+      .run('sh600519', '600519', 'sh', 200)
+    legacy.exec('PRAGMA user_version = 1')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    expect(tableNames(db)).toEqual(['alarms', 'notes', 'settings', 'watchlist'])
+    expect(userVersion(db)).toBe(2)
+    expect(countRows(db, 'alarms')).toBe(1)
+    expect(countRows(db, 'watchlist')).toBe(1)
   })
 })
 
@@ -323,7 +382,12 @@ describe('openDatabase 迁移幂等与异常数据', () => {
         path: join(dir, 'test.db'),
         legacyDir: dir
       })
-      expect(tableNames(db)).toEqual(['alarms', 'settings', 'watchlist'])
+      expect(tableNames(db)).toEqual([
+        'alarms',
+        'notes',
+        'settings',
+        'watchlist'
+      ])
       expect(countRows(db, 'alarms')).toBe(0)
       expect(countRows(db, 'watchlist')).toBe(0)
       expect(countRows(db, 'settings')).toBe(0)

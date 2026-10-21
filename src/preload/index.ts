@@ -13,6 +13,12 @@ import {
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
 import { UPDATE_CHANNELS, type UpdateApi } from '../shared/update'
+import {
+  NOTE_CHANNELS,
+  type Note,
+  type NoteApi,
+  type NoteDraft
+} from '../shared/notes'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -79,7 +85,28 @@ const update: UpdateApi = {
   check: () => ipcRenderer.invoke(UPDATE_CHANNELS.check)
 }
 
-const api = { alarms, market, update }
+// 暴露给渲染进程的便签 API
+const notes: NoteApi = {
+  list: () => ipcRenderer.invoke(NOTE_CHANNELS.list),
+  create: (draft: NoteDraft) => ipcRenderer.invoke(NOTE_CHANNELS.create, draft),
+  update: (id: string, draft: NoteDraft) =>
+    ipcRenderer.invoke(NOTE_CHANNELS.update, id, draft),
+  remove: (id: string) => ipcRenderer.invoke(NOTE_CHANNELS.remove, id),
+  onChanged: (callback: (notes: Note[]) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: Note[]
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(NOTE_CHANNELS.changed, listener)
+    return () => {
+      ipcRenderer.removeListener(NOTE_CHANNELS.changed, listener)
+    }
+  }
+}
+
+const api = { alarms, market, update, notes }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

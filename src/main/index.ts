@@ -17,7 +17,13 @@ import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
-import { registerAlarmIpc, registerMarketIpc, registerUpdateIpc } from './ipc'
+import { NoteStore } from './note-store'
+import {
+  registerAlarmIpc,
+  registerMarketIpc,
+  registerNotesIpc,
+  registerUpdateIpc
+} from './ipc'
 import { fetchQuotes } from './quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
@@ -143,6 +149,9 @@ app.whenReady().then(() => {
   })
 
   const marketStore = new MarketStore(db)
+
+  const noteStore = new NoteStore(db)
+  registerNotesIpc({ store: noteStore, getWindow: () => mainWindow })
 
   /** 把最新行情状态推给渲染层（读取的是 store / 调度器的最新值） */
   const pushMarketState = (): void => {

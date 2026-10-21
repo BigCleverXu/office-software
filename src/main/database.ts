@@ -16,13 +16,26 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
   paused: false,
   lastPage: DEFAULT_MODULE
 }
+
+/** notes 表建表语句（v2 新增，也用于 v1 升级） */
+const NOTES_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS notes (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'default',
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`
 
 /** 建表语句 */
 const SCHEMA_SQL = `
@@ -51,7 +64,7 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-`
+${NOTES_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -84,6 +97,17 @@ interface SettingRow {
   value: string
 }
 
+/** notes 表行结构 */
+interface NoteRow {
+  id: string
+  title: string
+  content: string
+  color: string
+  pinned: number
+  created_at: number
+  updated_at: number
+}
+
 /** PRAGMA user_version 结果 */
 interface UserVersionRow {
   user_version: number
@@ -111,14 +135,23 @@ function readUserVersion(db: DatabaseSync): number {
   return row?.user_version ?? 0
 }
 
-/** 版本为 0 时建表并写入版本号 */
+/**
+ * 按 PRAGMA user_version 逐版本升级表结构：
+ * v0 全新建库建四张表；v1 只补 notes 表；已是最新版本则直接返回。
+ */
 function applySchema(db: DatabaseSync): void {
-  if (readUserVersion(db) !== 0) {
+  const version = readUserVersion(db)
+  if (version >= 2) {
     return
   }
   db.exec('BEGIN')
   try {
-    db.exec(SCHEMA_SQL)
+    if (version === 0) {
+      db.exec(SCHEMA_SQL)
+    } else {
+      // v1 -> v2：仅新增 notes 表，其余表与数据保持不变
+      db.exec(NOTES_TABLE_SQL)
+    }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')
   } catch (error) {
@@ -361,4 +394,4 @@ export function closeDatabase(db: DatabaseSync): void {
 }
 
 /** 行类型供后续 store 改造使用 */
-export type { AlarmRow, SettingRow, WatchlistRow }
+export type { AlarmRow, NoteRow, SettingRow, WatchlistRow }

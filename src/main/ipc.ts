@@ -18,6 +18,9 @@ import {
 } from '../shared/update'
 import type { MarketStore } from './market-store'
 import type { MarketScheduler } from './market-scheduler'
+import type { NoteStore } from './note-store'
+import { NOTE_CHANNELS } from '../shared/notes'
+import type { NoteDraft } from '../shared/notes'
 import { fetchQuotes } from './quote-provider'
 import { fetchLatestRelease, type ReleaseFetchResult } from './release-provider'
 
@@ -73,6 +76,50 @@ export function registerAlarmIpc(deps: AlarmIpcDeps): void {
       const updated = store.setEnabled(id, enabled)
       broadcast()
       return updated
+    }
+  )
+}
+
+export interface NotesIpcDeps {
+  store: NoteStore
+  getWindow: () => BrowserWindow | null
+}
+
+/**
+ * 注册便签相关的 IPC 通道。每次变更后把最新列表广播给渲染进程。
+ */
+export function registerNotesIpc(deps: NotesIpcDeps): void {
+  const { store, getWindow } = deps
+
+  const broadcast = (): void => {
+    getWindow()?.webContents.send(NOTE_CHANNELS.changed, store.getAll())
+  }
+
+  ipcMain.handle(NOTE_CHANNELS.list, () => store.getAll())
+
+  ipcMain.handle(
+    NOTE_CHANNELS.create,
+    (_event: Electron.IpcMainInvokeEvent, draft: NoteDraft) => {
+      const created = store.create(draft)
+      broadcast()
+      return created
+    }
+  )
+
+  ipcMain.handle(
+    NOTE_CHANNELS.update,
+    (_event: Electron.IpcMainInvokeEvent, id: string, draft: NoteDraft) => {
+      const updated = store.update(id, draft)
+      broadcast()
+      return updated
+    }
+  )
+
+  ipcMain.handle(
+    NOTE_CHANNELS.remove,
+    (_event: Electron.IpcMainInvokeEvent, id: string) => {
+      store.remove(id)
+      broadcast()
     }
   )
 }

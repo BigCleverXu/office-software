@@ -1,10 +1,11 @@
 // 渲染层模块注册表：外壳据此渲染侧边栏导航与内容区
 
 import type { Component } from 'vue'
-import { AlarmClock, LineChart } from 'lucide-vue-next'
+import { AlarmClock, LineChart, StickyNote } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
+import NotesPanel from '@/components/NotesPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
 export interface ModuleMeta {
@@ -35,6 +36,13 @@ export const MODULES: ModuleMeta[] = [
     description: '大盘指数与自选股行情，交易时段自动刷新',
     icon: LineChart,
     component: MarketPanel
+  },
+  {
+    id: 'notes',
+    label: '便签',
+    description: '随手记录、置顶与检索本地便签',
+    icon: StickyNote,
+    component: NotesPanel
   }
 ]
 
