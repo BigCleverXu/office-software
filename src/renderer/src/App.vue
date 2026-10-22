@@ -6,8 +6,10 @@ import { DEFAULT_MODULE } from '@shared/navigation'
 import type { AppTheme } from '@shared/settings'
 import AppSidebar from '@/components/AppSidebar.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import UpdateCheckDialog from '@/components/UpdateCheckDialog.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { applyTheme, useSettings } from '@/composables/useSettings'
+import { useUpdateCheck } from '@/composables/useUpdateCheck'
 import { MODULES, moduleById } from '@/lib/modules'
 
 const active = ref<AppModuleId>(DEFAULT_MODULE)
@@ -15,6 +17,12 @@ const collapsed = useLocalStorage('reminder:sidebar-collapsed', false)
 const showSettings = ref(false)
 
 const { settings } = useSettings()
+const {
+  checking: updateChecking,
+  open: updateOpen,
+  result: updateResult,
+  showResult
+} = useUpdateCheck()
 const preferredDark = usePreferredDark()
 
 const currentModule = computed(() => moduleById(active.value))
@@ -42,6 +50,7 @@ watch(
 )
 
 let unsubscribeNavigate: (() => void) | null = null
+let unsubscribeUpdate: (() => void) | null = null
 
 /** 选择模块即退出设置页，并记录模块记忆 */
 const select = (id: AppModuleId): void => {
@@ -59,6 +68,10 @@ const toggleCollapsed = (): void => {
 }
 
 onMounted(async () => {
+  // 先订阅自动检查提醒，避免启动首检结果在挂载前丢失
+  unsubscribeUpdate = window.api.update.onAvailable((next) => {
+    showResult(next)
+  })
   const state = await window.api.market.getState()
   active.value = state.settings.lastPage
   unsubscribeNavigate = window.api.market.onNavigate((id) => {
@@ -69,6 +82,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unsubscribeNavigate?.()
+  unsubscribeUpdate?.()
 })
 </script>
 
@@ -106,5 +120,12 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 全局更新提示：任意模块页面均可弹出 -->
+    <UpdateCheckDialog
+      v-model:open="updateOpen"
+      :checking="updateChecking"
+      :result="updateResult"
+    />
   </TooltipProvider>
 </template>

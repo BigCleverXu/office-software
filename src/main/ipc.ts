@@ -13,11 +13,7 @@ import {
   type MarketState
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
-import {
-  UPDATE_CHANNELS,
-  isNewerVersion,
-  type UpdateCheckResult
-} from '../shared/update'
+import { UPDATE_CHANNELS, type UpdateCheckResult } from '../shared/update'
 import type { MarketStore } from './market-store'
 import type { MarketScheduler } from './market-scheduler'
 import type { NoteStore } from './note-store'
@@ -25,6 +21,7 @@ import { NOTE_CHANNELS } from '../shared/notes'
 import type { NoteDraft } from '../shared/notes'
 import { fetchQuotes } from './quote-provider'
 import { fetchLatestRelease, type ReleaseFetchResult } from './release-provider'
+import { checkForUpdate } from './update-checker'
 import {
   SETTINGS_CHANNELS,
   type AppSettings,
@@ -238,39 +235,13 @@ export interface UpdateIpcDeps {
 
 /**
  * 注册检查更新 IPC 通道。职责：对比当前版本与 GitHub 最新发行版，
- * 归类为四态结果返回渲染层；任何异常都收敛为 error 结果，绝不抛出。
+ * 归类为四态结果返回渲染层；判定逻辑复用 checkForUpdate，绝不抛出。
  */
 export function registerUpdateIpc(deps: UpdateIpcDeps): void {
   const fetchRelease = deps.fetchRelease ?? (() => fetchLatestRelease())
 
-  ipcMain.handle(
-    UPDATE_CHANNELS.check,
-    async (): Promise<UpdateCheckResult> => {
-      const currentVersion = deps.getVersion()
-      try {
-        const result = await fetchRelease()
-        if (!result.ok) {
-          return { status: 'error', currentVersion, reason: result.reason }
-        }
-        if (result.release === null) {
-          return { status: 'no-release', currentVersion }
-        }
-        if (isNewerVersion(result.release.version, currentVersion)) {
-          return {
-            status: 'update-available',
-            currentVersion,
-            release: result.release
-          }
-        }
-        return {
-          status: 'up-to-date',
-          currentVersion,
-          release: result.release
-        }
-      } catch {
-        return { status: 'error', currentVersion, reason: 'unknown' }
-      }
-    }
+  ipcMain.handle(UPDATE_CHANNELS.check, async (): Promise<UpdateCheckResult> =>
+    checkForUpdate(deps.getVersion(), fetchRelease)
   )
 }
 

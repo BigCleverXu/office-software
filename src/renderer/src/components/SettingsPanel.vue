@@ -4,7 +4,6 @@ import { Download, DownloadCloud, FolderOpen, Loader2 } from 'lucide-vue-next'
 import type { AppSettings, AppTheme } from '@shared/settings'
 import { DEFAULT_APP_SETTINGS } from '@shared/settings'
 import SettingsRow from '@/components/SettingsRow.vue'
-import UpdateCheckDialog from '@/components/UpdateCheckDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -37,12 +36,7 @@ const {
   exportBackup
 } = useSettings()
 
-const {
-  checking,
-  open: updateOpen,
-  result: updateResult,
-  check
-} = useUpdateCheck()
+const { checking, check } = useUpdateCheck()
 
 /** 设置尚未加载时使用默认值渲染，读取控件值时不会取到 undefined */
 const current = computed<AppSettings>(
@@ -296,11 +290,5 @@ const handleCheckUpdate = (): void => {
       />
       <p class="text-muted-foreground text-sm">{{ loadingText }}</p>
     </div>
-
-    <UpdateCheckDialog
-      v-model:open="updateOpen"
-      :checking="checking"
-      :result="updateResult"
-    />
   </div>
 </template>

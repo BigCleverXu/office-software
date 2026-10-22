@@ -12,7 +12,11 @@ import {
   type MarketState
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
-import { UPDATE_CHANNELS, type UpdateApi } from '../shared/update'
+import {
+  UPDATE_CHANNELS,
+  type UpdateApi,
+  type UpdateCheckResult
+} from '../shared/update'
 import {
   NOTE_CHANNELS,
   type Note,
@@ -91,7 +95,19 @@ const market: MarketApi = {
 }
 
 const update: UpdateApi = {
-  check: () => ipcRenderer.invoke(UPDATE_CHANNELS.check)
+  check: () => ipcRenderer.invoke(UPDATE_CHANNELS.check),
+  onAvailable: (callback: (result: UpdateCheckResult) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: UpdateCheckResult
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(UPDATE_CHANNELS.available, listener)
+    return () => {
+      ipcRenderer.removeListener(UPDATE_CHANNELS.available, listener)
+    }
+  }
 }
 
 // 暴露给渲染进程的便签 API

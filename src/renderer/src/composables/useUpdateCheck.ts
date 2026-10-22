@@ -11,6 +11,16 @@ export const UPDATE_ERROR_TEXT: Record<UpdateErrorReason, string> = {
   unknown: '发生未知错误'
 }
 
+// 模块级共享状态：设置页手动检查与主进程自动检查共用同一弹窗
+const checking = ref(false)
+const open = ref(false)
+const result = ref<UpdateCheckResult | null>(null)
+
+const errorText = computed(() => {
+  const current = result.value
+  return current?.status === 'error' ? UPDATE_ERROR_TEXT[current.reason] : ''
+})
+
 interface UseUpdateCheck {
   /** 是否正在检查 */
   checking: Ref<boolean>
@@ -22,6 +32,8 @@ interface UseUpdateCheck {
   errorText: ComputedRef<string>
   /** 触发检查，完成后打开弹窗 */
   check: () => Promise<void>
+  /** 展示外部推送的检查结果并打开弹窗 */
+  showResult: (next: UpdateCheckResult) => void
 }
 
 /**
@@ -29,15 +41,6 @@ interface UseUpdateCheck {
  * 任何异常都收敛为 unknown 失败结果，行为与此前侧边栏入口一致。
  */
 export function useUpdateCheck(): UseUpdateCheck {
-  const checking = ref(false)
-  const open = ref(false)
-  const result = ref<UpdateCheckResult | null>(null)
-
-  const errorText = computed(() => {
-    const current = result.value
-    return current?.status === 'error' ? UPDATE_ERROR_TEXT[current.reason] : ''
-  })
-
   const check = async (): Promise<void> => {
     if (checking.value) return
     checking.value = true
@@ -55,5 +58,10 @@ export function useUpdateCheck(): UseUpdateCheck {
     open.value = true
   }
 
-  return { checking, open, result, errorText, check }
+  const showResult = (next: UpdateCheckResult): void => {
+    result.value = next
+    open.value = true
+  }
+
+  return { checking, open, result, errorText, check, showResult }
 }

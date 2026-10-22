@@ -3,8 +3,17 @@
 
 /** 检查更新的 IPC 通道 */
 export const UPDATE_CHANNELS = {
-  check: 'update:check'
+  /** 渲染层主动触发检查更新 */
+  check: 'update:check',
+  /** 主进程推送自动检查发现的新版本结果 */
+  available: 'update:available'
 } as const
+
+/** 自动检查更新的周期：每 4 小时一次 */
+export const AUTO_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+/** 自动检查更新的首次延迟：应用启动 10 秒后执行首检 */
+export const AUTO_CHECK_INITIAL_DELAY_MS = 10 * 1000
 
 /** GitHub 仓库归属者 */
 export const GITHUB_OWNER = 'BigCleverXu'
@@ -47,6 +56,11 @@ export type UpdateCheckResult =
 /** preload 暴露给渲染层的检查更新 API */
 export interface UpdateApi {
   check: () => Promise<UpdateCheckResult>
+  /**
+   * 订阅主进程自动检查发现的新版本提醒。
+   * 返回值为取消订阅函数，组件卸载时调用以避免监听泄漏。
+   */
+  onAvailable: (callback: (result: UpdateCheckResult) => void) => () => void
 }
 
 /** 去除首尾空白与一个前导 v / V */

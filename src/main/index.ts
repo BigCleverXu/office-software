@@ -32,6 +32,8 @@ import { showAlarmNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
 import { SettingsStore } from './settings-store'
 import { getIntervalMs } from '../shared/interval'
+import { UPDATE_CHANNELS, type UpdateCheckResult } from '../shared/update'
+import { UpdateChecker } from './update-checker'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -44,6 +46,10 @@ let isQuitting = false
 let database: DatabaseSync | null = null
 /** 全局设置存储，供创建窗口（首帧主题）与设置 IPC 使用 */
 let settingsStore: SettingsStore | null = null
+/** 自动检查更新调度器 */
+let updateChecker: UpdateChecker | null = null
+/** 窗口不可见期间产生的更新结果，待重新显示时投递 */
+let pendingUpdate: UpdateCheckResult | null = null
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -81,6 +87,10 @@ function createWindow(): void {
     }
   })
 
+  // 窗口重新显示 / 还原时投递暂存的更新结果
+  win.on('show', flushPendingUpdate)
+  win.on('restore', flushPendingUpdate)
+
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -93,6 +103,51 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/** 向窗口投递更新结果；页面尚未加载完成时等待加载结束再发送 */
+function sendUpdateResult(win: BrowserWindow, result: UpdateCheckResult): void {
+  if (win.isDestroyed()) {
+    return
+  }
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', () => {
+      if (win.isDestroyed()) {
+        return
+      }
+      win.webContents.send(UPDATE_CHANNELS.available, result)
+    })
+    return
+  }
+  win.webContents.send(UPDATE_CHANNELS.available, result)
+}
+
+/** 投递自动检查结果：窗口不可见时暂存，待重新显示时再发 */
+function deliverUpdateResult(result: UpdateCheckResult): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) {
+    pendingUpdate = result
+    return
+  }
+  sendUpdateResult(win, result)
+  pendingUpdate = null
+}
+
+/** 窗口重新显示 / 还原时清空暂存的更新结果 */
+function flushPendingUpdate(): void {
+  const win = mainWindow
+  if (
+    !pendingUpdate ||
+    !win ||
+    win.isDestroyed() ||
+    !win.isVisible() ||
+    win.isMinimized()
+  ) {
+    return
+  }
+  const result = pendingUpdate
+  pendingUpdate = null
+  sendUpdateResult(win, result)
 }
 
 /** 显示并聚焦主窗口；窗口不存在时重新创建 */
@@ -227,6 +282,14 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // 窗口就绪后再启动自动检查，避免首次结果无处投递
+  const checker = new UpdateChecker({
+    getVersion: () => app.getVersion(),
+    onUpdateAvailable: (result) => deliverUpdateResult(result)
+  })
+  updateChecker = checker
+  checker.start()
+
   tray = createTray({
     showWindow: showMainWindow,
     openMarket: () => {
@@ -251,6 +314,8 @@ app.on('before-quit', () => {
   isQuitting = true
   scheduler?.stop()
   marketSchedulerRef?.stop()
+  updateChecker?.stop()
+  updateChecker = null
   if (trayTooltipTimer !== null) {
     clearInterval(trayTooltipTimer)
     trayTooltipTimer = null
