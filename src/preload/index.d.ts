@@ -3,6 +3,7 @@ import type { AlarmApi } from '../shared/types'
 import type { MarketApi } from '../shared/market'
 import type { NoteApi } from '../shared/notes'
 import type { UpdateApi } from '../shared/update'
+import type { SettingsApi } from '../shared/settings'
 
 declare global {
   interface Window {
@@ -12,6 +13,7 @@ declare global {
       market: MarketApi
       update: UpdateApi
       notes: NoteApi
+      settings: SettingsApi
     }
   }
 }

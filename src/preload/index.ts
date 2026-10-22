@@ -19,6 +19,15 @@ import {
   type NoteApi,
   type NoteDraft
 } from '../shared/notes'
+import {
+  SETTINGS_CHANNELS,
+  type AppSettings,
+  type AppTheme,
+  type ExportBackupResult,
+  type OpenDataDirResult,
+  type SettingsApi,
+  type SettingsViewState
+} from '../shared/settings'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -106,7 +115,43 @@ const notes: NoteApi = {
   }
 }
 
-const api = { alarms, market, update, notes }
+/** 从启动参数解析首帧主题，仅接受三个合法值，否则回退 'system' */
+function readInitialTheme(): AppTheme {
+  const prefix = '--app-theme='
+  const arg = process.argv.find((item) => item.startsWith(prefix))
+  const value = arg?.slice(prefix.length)
+  if (value === 'light' || value === 'dark') {
+    return value
+  }
+  return 'system'
+}
+
+// 暴露给渲染进程的设置 API
+const settings: SettingsApi = {
+  initialTheme: readInitialTheme(),
+  get: (): Promise<SettingsViewState> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.get),
+  update: (patch: Partial<AppSettings>): Promise<SettingsViewState> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.update, patch),
+  openDataDir: (): Promise<OpenDataDirResult> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.openDataDir),
+  exportBackup: (): Promise<ExportBackupResult> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.exportBackup),
+  onChanged: (callback: (state: SettingsViewState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: SettingsViewState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(SETTINGS_CHANNELS.changed, listener)
+    return () => {
+      ipcRenderer.removeListener(SETTINGS_CHANNELS.changed, listener)
+    }
+  }
+}
+
+const api = { alarms, market, update, notes, settings }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

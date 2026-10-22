@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import type { Tray } from 'electron'
 import type { DatabaseSync } from 'node:sqlite'
 import { join } from 'path'
@@ -19,15 +19,18 @@ import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
 import { NoteStore } from './note-store'
 import {
+  applyLaunchAtLoginSetting,
   registerAlarmIpc,
   registerMarketIpc,
   registerNotesIpc,
+  registerSettingsIpc,
   registerUpdateIpc
 } from './ipc'
 import { fetchQuotes } from './quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
+import { SettingsStore } from './settings-store'
 import { getIntervalMs } from '../shared/interval'
 
 let mainWindow: BrowserWindow | null = null
@@ -39,6 +42,8 @@ let trayTooltipTimer: ReturnType<typeof setInterval> | null = null
 let lastShanghai: Quote | null = null
 let isQuitting = false
 let database: DatabaseSync | null = null
+/** 全局设置存储，供创建窗口（首帧主题）与设置 IPC 使用 */
+let settingsStore: SettingsStore | null = null
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -49,7 +54,11 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // 首个渲染帧前注入主题，避免浅色闪烁
+      additionalArguments: [
+        `--app-theme=${settingsStore?.get().theme ?? 'system'}`
+      ]
     }
   })
 
@@ -113,6 +122,19 @@ app.whenReady().then(() => {
 
   const db = openDatabase()
   database = db
+
+  const appSettings = new SettingsStore(db)
+  settingsStore = appSettings
+
+  // 启动时以设置对齐系统登录项；失败只记录，不阻塞启动
+  try {
+    applyLaunchAtLoginSetting(appSettings.get().launchAtLogin)
+  } catch (error) {
+    console.error('同步开机自启设置失败:', error)
+  }
+
+  // 原生窗口主题跟随设置，渲染层通过启动参数拿到同一值
+  nativeTheme.themeSource = appSettings.get().theme
 
   const store = new AlarmStore(db)
 
@@ -200,6 +222,8 @@ app.whenReady().then(() => {
   })
 
   registerUpdateIpc({ getVersion: () => app.getVersion() })
+
+  registerSettingsIpc({ store: appSettings, getWindow: () => mainWindow })
 
   createWindow()
 

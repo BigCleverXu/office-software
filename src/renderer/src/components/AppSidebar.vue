@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Component } from 'vue'
-import { Bell, PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
+import { Bell, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import {
   Tooltip,
@@ -9,12 +9,16 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip'
 import { MODULES } from '@/lib/modules'
-import UpdateCheckEntry from './UpdateCheckEntry.vue'
 
-const props = defineProps<{ active: AppModuleId; collapsed: boolean }>()
+const props = defineProps<{
+  active: AppModuleId
+  collapsed: boolean
+  settingsActive: boolean
+}>()
 
 const emit = defineEmits<{
   select: [id: AppModuleId]
+  settings: []
   toggle: []
 }>()
 
@@ -41,6 +45,17 @@ const navItems = computed<NavItem[]>(() =>
             'hover:text-sidebar-accent-foreground'
           ].join(' ')
   }))
+)
+
+/** 设置入口的选中 / 未选中态类名 */
+const settingsItemClass = computed(() =>
+  props.settingsActive
+    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+    : [
+        'text-sidebar-foreground/70',
+        'hover:bg-sidebar-accent/60',
+        'hover:text-sidebar-accent-foreground'
+      ].join(' ')
 )
 </script>
 
@@ -94,7 +109,33 @@ const navItems = computed<NavItem[]>(() =>
     </nav>
 
     <div class="border-sidebar-border flex flex-col gap-1 border-t p-2">
-      <UpdateCheckEntry :collapsed="collapsed" />
+      <Tooltip v-if="collapsed">
+        <TooltipTrigger as-child>
+          <button
+            type="button"
+            aria-label="设置"
+            title="设置"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+            :class="settingsItemClass"
+            @click="emit('settings')"
+          >
+            <Settings class="size-4 shrink-0" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">设置</TooltipContent>
+      </Tooltip>
+
+      <button
+        v-else
+        type="button"
+        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+        :class="settingsItemClass"
+        @click="emit('settings')"
+      >
+        <Settings class="size-4 shrink-0" />
+        <span class="truncate">设置</span>
+      </button>
+
       <button
         type="button"
         class="text-muted-foreground hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:text-sidebar-accent-foreground"
