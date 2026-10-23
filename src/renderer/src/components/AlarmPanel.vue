@@ -58,7 +58,7 @@ const handleRemove = (alarm: Alarm): void => {
       </Button>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-6">
+    <div class="flex-1 overflow-y-auto px-6 py-2">
       <div
         v-if="alarms.length === 0"
         class="text-muted-foreground flex h-full flex-col items-center justify-center gap-3"

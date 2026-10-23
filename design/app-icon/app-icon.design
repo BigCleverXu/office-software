@@ -24,12 +24,16 @@
       "type": "image",
       "version": 1,
       "createdAt": 1792389123871,
+      "canvasData": {
+        "x": 480,
+        "y": 0,
+        "naturalSize": {
+          "width": 1920,
+          "height": 1920
+        }
+      },
       "devMetadata": {
         "imageSrc": "assets/app-icon-bell-trend-clean.png"
-      },
-      "canvasData": {
-        "x": 0,
-        "y": 0
       }
     }
   ],
