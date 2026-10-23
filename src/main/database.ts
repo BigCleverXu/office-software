@@ -16,7 +16,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -34,6 +34,27 @@ CREATE TABLE IF NOT EXISTS notes (
   pinned     INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
+);
+`
+
+/** countdowns 表与索引建表语句（v3 新增，也用于旧版本升级） */
+const COUNTDOWNS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS countdowns (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  date       TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_countdowns_date ON countdowns(date);
+`
+
+/** holiday_cache 表建表语句（v3 新增，也用于旧版本升级） */
+const HOLIDAY_CACHE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS holiday_cache (
+  year       INTEGER PRIMARY KEY,
+  payload    TEXT NOT NULL,
+  fetched_at INTEGER NOT NULL
 );
 `
 
@@ -64,7 +85,9 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-${NOTES_TABLE_SQL}`
+${NOTES_TABLE_SQL}
+${COUNTDOWNS_TABLE_SQL}
+${HOLIDAY_CACHE_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -108,6 +131,22 @@ interface NoteRow {
   updated_at: number
 }
 
+/** countdowns 表行结构 */
+interface CountdownRow {
+  id: string
+  title: string
+  date: string
+  created_at: number
+  updated_at: number
+}
+
+/** holiday_cache 表行结构 */
+interface HolidayCacheRow {
+  year: number
+  payload: string
+  fetched_at: number
+}
+
 /** PRAGMA user_version 结果 */
 interface UserVersionRow {
   user_version: number
@@ -137,20 +176,26 @@ function readUserVersion(db: DatabaseSync): number {
 
 /**
  * 按 PRAGMA user_version 逐版本升级表结构：
- * v0 全新建库建四张表；v1 只补 notes 表；已是最新版本则直接返回。
+ * v0 全新建库建全部表；v1 先补 notes 表；随后在 v3 之前补
+ * countdowns / holiday_cache 表；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
-  if (version >= 2) {
+  if (version >= SCHEMA_VERSION) {
     return
   }
   db.exec('BEGIN')
   try {
     if (version === 0) {
       db.exec(SCHEMA_SQL)
-    } else {
-      // v1 -> v2：仅新增 notes 表，其余表与数据保持不变
+    } else if (version === 1) {
+      // v1 -> v2：新增 notes 表，其余表与数据保持不变
       db.exec(NOTES_TABLE_SQL)
+    }
+    if (version < 3) {
+      // v1 / v2 -> v3：新增日历相关表；v0 时重复执行 IF NOT EXISTS 也安全
+      db.exec(COUNTDOWNS_TABLE_SQL)
+      db.exec(HOLIDAY_CACHE_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')
@@ -394,4 +439,11 @@ export function closeDatabase(db: DatabaseSync): void {
 }
 
 /** 行类型供后续 store 改造使用 */
-export type { AlarmRow, NoteRow, SettingRow, WatchlistRow }
+export type {
+  AlarmRow,
+  CountdownRow,
+  HolidayCacheRow,
+  NoteRow,
+  SettingRow,
+  WatchlistRow
+}

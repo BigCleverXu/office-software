@@ -4,6 +4,7 @@ import type { MarketApi } from '../shared/market'
 import type { NoteApi } from '../shared/notes'
 import type { UpdateApi } from '../shared/update'
 import type { SettingsApi } from '../shared/settings'
+import type { CalendarApi } from '../shared/calendar'
 
 declare global {
   interface Window {
@@ -13,6 +14,7 @@ declare global {
       market: MarketApi
       update: UpdateApi
       notes: NoteApi
+      calendar: CalendarApi
       settings: SettingsApi
     }
   }

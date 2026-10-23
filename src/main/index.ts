@@ -18,9 +18,13 @@ import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
 import { NoteStore } from './note-store'
+import { CountdownStore } from './countdown-store'
+import { HolidayService } from './holiday-service'
+import { CALENDAR_CHANNELS } from '../shared/calendar'
 import {
   applyLaunchAtLoginSetting,
   registerAlarmIpc,
+  registerCalendarIpc,
   registerMarketIpc,
   registerNotesIpc,
   registerSettingsIpc,
@@ -230,6 +234,20 @@ app.whenReady().then(() => {
   const noteStore = new NoteStore(db)
   registerNotesIpc({ store: noteStore, getWindow: () => mainWindow })
 
+  const countdownStore = new CountdownStore(db)
+  // 后台刷新成功后主动推送，渲染层无需轮询
+  const holidayService = new HolidayService({
+    db,
+    onUpdated: (data) => {
+      mainWindow?.webContents.send(CALENDAR_CHANNELS.holidaysChanged, data)
+    }
+  })
+  registerCalendarIpc({
+    countdownStore,
+    holidayService,
+    getWindow: () => mainWindow
+  })
+
   /** 把最新行情状态推给渲染层（读取的是 store / 调度器的最新值） */
   const pushMarketState = (): void => {
     mainWindow?.webContents.send(MARKET_CHANNELS.stateChanged, {
@@ -281,6 +299,9 @@ app.whenReady().then(() => {
   registerSettingsIpc({ store: appSettings, getWindow: () => mainWindow })
 
   createWindow()
+
+  // 后台预热当前年份节假日缓存，不阻塞启动
+  void holidayService.refresh(new Date().getFullYear())
 
   // 窗口就绪后再启动自动检查，避免首次结果无处投递
   const checker = new UpdateChecker({

@@ -24,6 +24,13 @@ import {
   type NoteDraft
 } from '../shared/notes'
 import {
+  CALENDAR_CHANNELS,
+  type CalendarApi,
+  type Countdown,
+  type CountdownDraft,
+  type HolidayYear
+} from '../shared/calendar'
+import {
   SETTINGS_CHANNELS,
   type AppSettings,
   type AppTheme,
@@ -131,6 +138,47 @@ const notes: NoteApi = {
   }
 }
 
+// 暴露给渲染进程的日历与倒计日 API
+const calendar: CalendarApi = {
+  listCountdowns: (): Promise<Countdown[]> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.listCountdowns),
+  createCountdown: (draft: CountdownDraft): Promise<Countdown> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.createCountdown, draft),
+  updateCountdown: (
+    id: string,
+    draft: CountdownDraft
+  ): Promise<Countdown | null> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.updateCountdown, id, draft),
+  removeCountdown: (id: string): Promise<void> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.removeCountdown, id),
+  getHolidays: (year: number): Promise<HolidayYear> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.getHolidays, year),
+  onCountdownsChanged: (callback: (items: Countdown[]) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: Countdown[]
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(CALENDAR_CHANNELS.countdownsChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(CALENDAR_CHANNELS.countdownsChanged, listener)
+    }
+  },
+  onHolidaysChanged: (callback: (data: HolidayYear) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: HolidayYear
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(CALENDAR_CHANNELS.holidaysChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(CALENDAR_CHANNELS.holidaysChanged, listener)
+    }
+  }
+}
+
 /** 从启动参数解析首帧主题，仅接受三个合法值，否则回退 'system' */
 function readInitialTheme(): AppTheme {
   const prefix = '--app-theme='
@@ -167,7 +215,7 @@ const settings: SettingsApi = {
   }
 }
 
-const api = { alarms, market, update, notes, settings }
+const api = { alarms, market, update, notes, calendar, settings }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

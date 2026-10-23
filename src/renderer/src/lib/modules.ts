@@ -1,9 +1,15 @@
 // 渲染层模块注册表：外壳据此渲染侧边栏导航与内容区
 
 import type { Component } from 'vue'
-import { AlarmClock, LineChart, StickyNote } from 'lucide-vue-next'
+import {
+  AlarmClock,
+  CalendarDays,
+  LineChart,
+  StickyNote
+} from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
+import CalendarPanel from '@/components/CalendarPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
 
@@ -29,6 +35,13 @@ export const MODULES: ModuleMeta[] = [
     description: '设定时间与重复规则，到点弹出系统通知',
     icon: AlarmClock,
     component: AlarmPanel
+  },
+  {
+    id: 'calendar',
+    label: '日历',
+    description: '查看月历与节假日安排，管理倒计日',
+    icon: CalendarDays,
+    component: CalendarPanel
   },
   {
     id: 'market',
