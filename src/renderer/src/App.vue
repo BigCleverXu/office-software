@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLocalStorage, usePreferredDark } from '@vueuse/core'
+import { Loader2 } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import { DEFAULT_MODULE } from '@shared/navigation'
 import type { AppTheme } from '@shared/settings'
@@ -10,6 +11,7 @@ import UpdateCheckDialog from '@/components/UpdateCheckDialog.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { applyTheme, useSettings } from '@/composables/useSettings'
 import { useUpdateCheck } from '@/composables/useUpdateCheck'
+import { useUpdateDownload } from '@/composables/useUpdateDownload'
 import { MODULES, moduleById } from '@/lib/modules'
 
 const active = ref<AppModuleId>(DEFAULT_MODULE)
@@ -23,6 +25,8 @@ const {
   result: updateResult,
   showResult
 } = useUpdateCheck()
+const { isDownloading: updateDownloading, progress: updateDownloadProgress } =
+  useUpdateDownload()
 const preferredDark = usePreferredDark()
 
 const currentModule = computed(() => moduleById(active.value))
@@ -127,5 +131,16 @@ onUnmounted(() => {
       :checking="updateChecking"
       :result="updateResult"
     />
+
+    <!-- 下载中关闭弹窗后仍可看到进度，点击重新打开弹窗 -->
+    <button
+      v-if="updateDownloading && !updateOpen"
+      type="button"
+      class="bg-background fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-lg"
+      @click="updateOpen = true"
+    >
+      <Loader2 class="size-4 animate-spin" />
+      正在下载更新 {{ updateDownloadProgress?.percent ?? 0 }}%
+    </button>
   </TooltipProvider>
 </template>

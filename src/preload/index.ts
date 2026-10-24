@@ -14,8 +14,13 @@ import {
 import type { AppModuleId } from '../shared/navigation'
 import {
   UPDATE_CHANNELS,
+  type OpenDownloadedResult,
+  type ReleaseAsset,
   type UpdateApi,
-  type UpdateCheckResult
+  type UpdateCheckResult,
+  type UpdateDownloadProgress,
+  type UpdateDownloadResult,
+  type UpdateDownloadSnapshot
 } from '../shared/update'
 import {
   NOTE_CHANNELS,
@@ -102,6 +107,8 @@ const market: MarketApi = {
 }
 
 const update: UpdateApi = {
+  platform: process.platform,
+  arch: process.arch,
   check: () => ipcRenderer.invoke(UPDATE_CHANNELS.check),
   onAvailable: (callback: (result: UpdateCheckResult) => void) => {
     const listener = (
@@ -114,7 +121,31 @@ const update: UpdateApi = {
     return () => {
       ipcRenderer.removeListener(UPDATE_CHANNELS.available, listener)
     }
-  }
+  },
+  download: (asset: ReleaseAsset): Promise<UpdateDownloadResult> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.download, asset),
+  getDownloadState: (): Promise<UpdateDownloadSnapshot> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.downloadState),
+  onDownloadProgress: (
+    callback: (progress: UpdateDownloadProgress) => void
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: UpdateDownloadProgress
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(UPDATE_CHANNELS.downloadProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(UPDATE_CHANNELS.downloadProgress, listener)
+    }
+  },
+  cancelDownload: (): Promise<void> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.cancelDownload),
+  openDownloaded: (filePath: string): Promise<OpenDownloadedResult> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.openDownloaded, filePath),
+  showInFolder: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke(UPDATE_CHANNELS.showInFolder, filePath)
 }
 
 // 暴露给渲染进程的便签 API

@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareVersions,
+  downloadAssetTypeLabel,
+  downloadPlatformLabel,
+  formatBytes,
   isNewerVersion,
   normalizeVersion,
   parseRelease,
-  releasePageUrl
+  releasePageUrl,
+  selectDownloadAsset
 } from './update'
+import type { ReleaseAsset } from './update'
+
+/** 构造测试用安装包资产 */
+function asset(name: string, size = 0): ReleaseAsset {
+  return { name, size, downloadUrl: `https://example.com/${name}` }
+}
 
 describe('normalizeVersion', () => {
   it('去掉前导 v / V 与首尾空白', () => {
@@ -81,7 +91,8 @@ describe('parseRelease', () => {
       notes: '更新说明',
       publishedAt: '2026-01-01T00:00:00+08:00',
       pageUrl:
-        'https://github.com/BigCleverXu/office-software/releases/tag/v1.2.0'
+        'https://github.com/BigCleverXu/office-software/releases/tag/v1.2.0',
+      assets: []
     })
   })
 
@@ -122,5 +133,249 @@ describe('parseRelease', () => {
     expect(parseRelease(null, 'BigCleverXu', 'office-software')).toBeNull()
     expect(parseRelease('text', 'BigCleverXu', 'office-software')).toBeNull()
     expect(parseRelease(123, 'BigCleverXu', 'office-software')).toBeNull()
+  })
+})
+
+describe('parseRelease 资产解析', () => {
+  const owner = 'BigCleverXu'
+  const repo = 'office-software'
+
+  it('解析多项资产并映射 downloadUrl', () => {
+    const result = parseRelease(
+      {
+        tag_name: 'v1.2.0',
+        assets: [
+          {
+            name: 'app-setup.exe',
+            size: 1024,
+            browser_download_url: 'https://example.com/app-setup.exe'
+          },
+          {
+            name: 'app-arm64.dmg',
+            size: 2048,
+            browser_download_url: 'https://example.com/app-arm64.dmg'
+          }
+        ]
+      },
+      owner,
+      repo
+    )
+    expect(result?.assets).toEqual([
+      {
+        name: 'app-setup.exe',
+        size: 1024,
+        downloadUrl: 'https://example.com/app-setup.exe'
+      },
+      {
+        name: 'app-arm64.dmg',
+        size: 2048,
+        downloadUrl: 'https://example.com/app-arm64.dmg'
+      }
+    ])
+  })
+
+  it('缺 assets 时为空数组', () => {
+    const result = parseRelease({ tag_name: 'v1.0.0' }, owner, repo)
+    expect(result?.assets).toEqual([])
+  })
+
+  it('assets 非数组时为空数组', () => {
+    const text = parseRelease(
+      { tag_name: 'v1.0.0', assets: 'invalid' },
+      owner,
+      repo
+    )
+    const object = parseRelease({ tag_name: 'v1.0.0', assets: {} }, owner, repo)
+    expect(text?.assets).toEqual([])
+    expect(object?.assets).toEqual([])
+  })
+
+  it('名称或下载地址缺失 / 非字符串的条目被忽略', () => {
+    const result = parseRelease(
+      {
+        tag_name: 'v1.0.0',
+        assets: [
+          null,
+          { size: 1 },
+          { name: '', browser_download_url: 'https://example.com/a.exe' },
+          { name: 12, browser_download_url: 'https://example.com/b.exe' },
+          { name: 'no-url.exe' },
+          { name: 'bad-url.exe', browser_download_url: 42 },
+          {
+            name: 'ok.exe',
+            browser_download_url: 'https://example.com/ok.exe'
+          }
+        ]
+      },
+      owner,
+      repo
+    )
+    expect(result?.assets).toEqual([
+      {
+        name: 'ok.exe',
+        size: 0,
+        downloadUrl: 'https://example.com/ok.exe'
+      }
+    ])
+  })
+
+  it('size 非法时记为 0', () => {
+    const result = parseRelease(
+      {
+        tag_name: 'v1.0.0',
+        assets: [
+          {
+            name: 'negative.exe',
+            size: -1,
+            browser_download_url: 'https://example.com/1'
+          },
+          {
+            name: 'nan.exe',
+            size: Number.NaN,
+            browser_download_url: 'https://example.com/2'
+          },
+          {
+            name: 'infinite.exe',
+            size: Number.POSITIVE_INFINITY,
+            browser_download_url: 'https://example.com/3'
+          },
+          {
+            name: 'text.exe',
+            size: '1024',
+            browser_download_url: 'https://example.com/4'
+          },
+          {
+            name: 'ok.exe',
+            size: 100,
+            browser_download_url: 'https://example.com/5'
+          }
+        ]
+      },
+      owner,
+      repo
+    )
+    expect(result?.assets.map((item) => item.size)).toEqual([0, 0, 0, 0, 100])
+  })
+})
+
+describe('selectDownloadAsset', () => {
+  it('Windows 只考虑 exe', () => {
+    const assets = [asset('app-x64.zip'), asset('app-x64.exe')]
+    expect(selectDownloadAsset(assets, 'win32', 'x64')?.name).toBe(
+      'app-x64.exe'
+    )
+  })
+
+  it('Windows 按架构匹配度排序', () => {
+    const assets = [
+      asset('app.exe'),
+      asset('app-arm64.exe'),
+      asset('app-x64.exe')
+    ]
+    expect(selectDownloadAsset(assets, 'win32', 'x64')?.name).toBe(
+      'app-x64.exe'
+    )
+    expect(selectDownloadAsset(assets, 'win32', 'arm64')?.name).toBe(
+      'app-arm64.exe'
+    )
+  })
+
+  it('macOS arm64 优先 arm64 dmg', () => {
+    const assets = [
+      asset('app.dmg'),
+      asset('app-x64.dmg'),
+      asset('app-arm64.dmg')
+    ]
+    expect(selectDownloadAsset(assets, 'darwin', 'arm64')?.name).toBe(
+      'app-arm64.dmg'
+    )
+  })
+
+  it('macOS x64 优先 x64 dmg，其次未标注 dmg', () => {
+    const marked = [asset('app.dmg'), asset('app-x64.dmg')]
+    expect(selectDownloadAsset(marked, 'darwin', 'x64')?.name).toBe(
+      'app-x64.dmg'
+    )
+    const unmarked = [asset('app-arm64.dmg'), asset('app.dmg')]
+    expect(selectDownloadAsset(unmarked, 'darwin', 'x64')?.name).toBe('app.dmg')
+  })
+
+  it('macOS 无 dmg 时回退 zip', () => {
+    const assets = [asset('app-arm64.zip'), asset('app-x64.zip')]
+    expect(selectDownloadAsset(assets, 'darwin', 'arm64')?.name).toBe(
+      'app-arm64.zip'
+    )
+  })
+
+  it('macOS dmg 优先于架构更匹配的 zip', () => {
+    const assets = [asset('app-arm64.zip'), asset('app-x64.dmg')]
+    expect(selectDownloadAsset(assets, 'darwin', 'arm64')?.name).toBe(
+      'app-x64.dmg'
+    )
+  })
+
+  it('Linux 优先 AppImage 且扩展名大小写不敏感', () => {
+    const assets = [asset('app-1.0.deb'), asset('App-1.0.APPIMAGE')]
+    expect(selectDownloadAsset(assets, 'linux', 'x64')?.name).toBe(
+      'App-1.0.APPIMAGE'
+    )
+  })
+
+  it('Linux 无 AppImage 时回退 deb', () => {
+    const assets = [asset('app-1.0.AppImage'), asset('app-1.0.deb')]
+    expect(selectDownloadAsset(assets, 'linux', 'x64')?.name).toBe(
+      'app-1.0.AppImage'
+    )
+    expect(
+      selectDownloadAsset([asset('app-1.0.deb')], 'linux', 'x64')?.name
+    ).toBe('app-1.0.deb')
+  })
+
+  it('其他平台或无匹配返回 null', () => {
+    expect(selectDownloadAsset([asset('app.exe')], 'freebsd', 'x64')).toBeNull()
+    expect(selectDownloadAsset([asset('app.dmg')], 'win32', 'x64')).toBeNull()
+    expect(selectDownloadAsset([], 'darwin', 'arm64')).toBeNull()
+  })
+
+  it('得分相同保持原有顺序', () => {
+    const assets = [asset('b.exe'), asset('a.exe')]
+    expect(selectDownloadAsset(assets, 'win32', 'x64')?.name).toBe('b.exe')
+  })
+})
+
+describe('downloadPlatformLabel', () => {
+  it('已知平台返回展示名，未知平台返回原值', () => {
+    expect(downloadPlatformLabel('win32')).toBe('Windows')
+    expect(downloadPlatformLabel('darwin')).toBe('macOS')
+    expect(downloadPlatformLabel('linux')).toBe('Linux')
+    expect(downloadPlatformLabel('freebsd')).toBe('freebsd')
+  })
+})
+
+describe('downloadAssetTypeLabel', () => {
+  it('按扩展名返回类型名且大小写不敏感', () => {
+    expect(downloadAssetTypeLabel(asset('app.exe'))).toBe('安装程序')
+    expect(downloadAssetTypeLabel(asset('app.DMG'))).toBe('磁盘映像')
+    expect(downloadAssetTypeLabel(asset('app.zip'))).toBe('压缩包')
+    expect(downloadAssetTypeLabel(asset('app.AppImage'))).toBe('AppImage')
+    expect(downloadAssetTypeLabel(asset('app.deb'))).toBe('deb 安装包')
+    expect(downloadAssetTypeLabel(asset('app.msi'))).toBe('安装包')
+  })
+})
+
+describe('formatBytes', () => {
+  it('0 或非法值返回未知大小', () => {
+    expect(formatBytes(0)).toBe('未知大小')
+    expect(formatBytes(-1)).toBe('未知大小')
+    expect(formatBytes(Number.NaN)).toBe('未知大小')
+    expect(formatBytes(Number.POSITIVE_INFINITY)).toBe('未知大小')
+  })
+
+  it('按 B/KB/MB/GB 保留一位小数', () => {
+    expect(formatBytes(512)).toBe('512.0 B')
+    expect(formatBytes(1024)).toBe('1.0 KB')
+    expect(formatBytes(1024 * 1024)).toBe('1.0 MB')
+    expect(formatBytes(1024 * 1024 * 130.8)).toBe('130.8 MB')
+    expect(formatBytes(1024 * 1024 * 1024)).toBe('1.0 GB')
   })
 })

@@ -16,7 +16,8 @@ function makeRelease(version: string): ReleaseInfo {
     title: `版本 ${version}`,
     notes: '',
     publishedAt: null,
-    pageUrl: `https://github.com/o/r/releases/tag/v${version}`
+    pageUrl: `https://github.com/o/r/releases/tag/v${version}`,
+    assets: []
   }
 }
 

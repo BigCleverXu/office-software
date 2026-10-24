@@ -4,6 +4,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import trayIcon from '../../resources/tray.png?asset'
+import trayTemplateIcon from '../../resources/trayTemplate.png?asset'
+import trayTemplateIcon2x from '../../resources/trayTemplate@2x.png?asset'
 import { ALARM_CHANNELS } from '../shared/types'
 import type { Alarm } from '../shared/types'
 import {
@@ -36,7 +39,11 @@ import { showAlarmNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
 import { SettingsStore } from './settings-store'
 import { getIntervalMs } from '../shared/interval'
-import { UPDATE_CHANNELS, type UpdateCheckResult } from '../shared/update'
+import {
+  UPDATE_CHANNELS,
+  UPDATE_DOWNLOAD_DIR_NAME,
+  type UpdateCheckResult
+} from '../shared/update'
 import { UpdateChecker } from './update-checker'
 
 let mainWindow: BrowserWindow | null = null
@@ -294,7 +301,11 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
-  registerUpdateIpc({ getVersion: () => app.getVersion() })
+  registerUpdateIpc({
+    getVersion: () => app.getVersion(),
+    getWindow: () => mainWindow,
+    downloadDir: join(app.getPath('temp'), UPDATE_DOWNLOAD_DIR_NAME)
+  })
 
   registerSettingsIpc({ store: appSettings, getWindow: () => mainWindow })
 
@@ -318,7 +329,11 @@ app.whenReady().then(() => {
       mainWindow?.webContents.send(MARKET_CHANNELS.navigate, 'market')
     },
     quit: () => app.quit(),
-    iconPath: icon
+    icons: {
+      color: trayIcon,
+      template: trayTemplateIcon,
+      template2x: trayTemplateIcon2x
+    }
   })
 
   alarmScheduler.start()
