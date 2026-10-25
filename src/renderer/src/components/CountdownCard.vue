@@ -42,7 +42,7 @@ const dateLabel = computed(() => {
 
 <template>
   <article
-    class="bg-card flex flex-col gap-2 rounded-xl border p-3 transition-colors"
+    class="bg-card flex flex-col gap-2 rounded-xl border p-3 transition-colors card-interactive shadow-soft h-full"
     :class="{ 'opacity-60': isPast }"
   >
     <header class="flex items-start justify-between gap-2">

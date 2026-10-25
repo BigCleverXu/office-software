@@ -153,7 +153,7 @@ onUnmounted(() => {
     <div class="flex-1 overflow-y-auto px-6 pb-6 py-2">
       <div
         v-if="showSkeleton"
-        class="columns-1 gap-3 lg:columns-2"
+        class="stagger-list columns-1 gap-3 lg:columns-2"
         role="status"
         aria-busy="true"
       >
@@ -161,20 +161,20 @@ onUnmounted(() => {
         <Card
           v-for="n in 4"
           :key="n"
-          class="mb-3 animate-pulse break-inside-avoid"
+          class="skeleton-shimmer mb-3 break-inside-avoid"
         >
           <CardHeader class="flex flex-row items-center justify-between gap-2">
-            <div class="bg-muted h-4 w-24 rounded"></div>
-            <div class="bg-muted h-5 w-8 rounded-full"></div>
+            <div class="bg-foreground/10 h-4 w-24 rounded"></div>
+            <div class="bg-foreground/10 h-5 w-8 rounded-full"></div>
           </CardHeader>
 
           <CardContent>
             <div v-for="row in 5" :key="row" class="flex flex-col gap-1.5 pb-3">
               <div
-                class="bg-muted h-3.5 rounded"
+                class="bg-foreground/10 h-3.5 rounded"
                 :class="row % 2 === 0 ? 'w-full' : 'w-3/4'"
               ></div>
-              <div class="bg-muted h-3 w-1/3 rounded"></div>
+              <div class="bg-foreground/10 h-3 w-1/3 rounded"></div>
             </div>
           </CardContent>
         </Card>
@@ -182,7 +182,7 @@ onUnmounted(() => {
 
       <div v-else>
         <div class="hidden gap-3 lg:grid lg:grid-cols-2 lg:items-start">
-          <div class="flex min-w-0 flex-col gap-3">
+          <div class="stagger-list flex min-w-0 flex-col gap-3">
             <NewsCard
               v-for="view in leftColumn"
               :key="view.platform"
@@ -191,7 +191,7 @@ onUnmounted(() => {
               @toggle="toggleExpanded(view.platform)"
             />
           </div>
-          <div class="flex min-w-0 flex-col gap-3">
+          <div class="stagger-list flex min-w-0 flex-col gap-3">
             <NewsCard
               v-for="view in rightColumn"
               :key="view.platform"
@@ -202,7 +202,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="flex flex-col gap-3 lg:hidden">
+        <div class="stagger-list flex flex-col gap-3 lg:hidden">
           <NewsCard
             v-for="view in sectionViews"
             :key="view.platform"
@@ -214,7 +214,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <footer class="text-muted-foreground border-t px-6 py-2 text-xs">
+    <footer
+      class="text-muted-foreground bg-muted/30 border-t px-6 py-2 text-xs"
+    >
       {{ FOOTER_TEXT }}
     </footer>
 

@@ -77,7 +77,7 @@ const updatedAtLabel = computed(() => formatUpdatedAt(props.note.updatedAt))
 
 <template>
   <article
-    class="flex flex-col gap-2 rounded-xl border p-3 transition-colors"
+    class="card-interactive shadow-soft flex h-full flex-col gap-2 rounded-xl border p-3 transition-colors"
     :class="cardClass"
   >
     <header class="flex items-start gap-2">

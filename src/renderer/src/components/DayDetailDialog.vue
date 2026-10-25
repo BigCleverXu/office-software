@@ -132,16 +132,18 @@ const countdownRows = computed<CountdownRow[]>(() =>
         <div
           role="tablist"
           aria-label="日期详情分类"
-          class="bg-muted flex w-fit flex-wrap items-center gap-1 rounded-lg p-1"
+          class="bg-muted ring-foreground/5 flex w-fit flex-wrap items-center rounded-lg p-1 ring-1"
         >
           <Button
             id="day-detail-tab-basic"
             role="tab"
             size="sm"
-            :variant="activeTab === 'basic' ? 'default' : 'ghost'"
+            class="transition-all duration-200"
+            :variant="activeTab === 'basic' ? 'secondary' : 'ghost'"
             :aria-selected="activeTab === 'basic'"
             :tabindex="activeTab === 'basic' ? 0 : -1"
             aria-controls="day-detail-panel-basic"
+            :class="activeTab === 'basic' ? 'shadow-soft' : ''"
             @click="activeTab = 'basic'"
           >
             基础
@@ -150,10 +152,12 @@ const countdownRows = computed<CountdownRow[]>(() =>
             id="day-detail-tab-almanac"
             role="tab"
             size="sm"
-            :variant="activeTab === 'almanac' ? 'default' : 'ghost'"
+            class="transition-all duration-200"
+            :variant="activeTab === 'almanac' ? 'secondary' : 'ghost'"
             :aria-selected="activeTab === 'almanac'"
             :tabindex="activeTab === 'almanac' ? 0 : -1"
             aria-controls="day-detail-panel-almanac"
+            :class="activeTab === 'almanac' ? 'shadow-soft' : ''"
             @click="activeTab = 'almanac'"
           >
             宜忌
@@ -162,10 +166,12 @@ const countdownRows = computed<CountdownRow[]>(() =>
             id="day-detail-tab-positions"
             role="tab"
             size="sm"
-            :variant="activeTab === 'positions' ? 'default' : 'ghost'"
+            class="transition-all duration-200"
+            :variant="activeTab === 'positions' ? 'secondary' : 'ghost'"
             :aria-selected="activeTab === 'positions'"
             :tabindex="activeTab === 'positions' ? 0 : -1"
             aria-controls="day-detail-panel-positions"
+            :class="activeTab === 'positions' ? 'shadow-soft' : ''"
             @click="activeTab = 'positions'"
           >
             神位
@@ -174,10 +180,12 @@ const countdownRows = computed<CountdownRow[]>(() =>
             id="day-detail-tab-countdowns"
             role="tab"
             size="sm"
-            :variant="activeTab === 'countdowns' ? 'default' : 'ghost'"
+            class="transition-all duration-200"
+            :variant="activeTab === 'countdowns' ? 'secondary' : 'ghost'"
             :aria-selected="activeTab === 'countdowns'"
             :tabindex="activeTab === 'countdowns' ? 0 : -1"
             aria-controls="day-detail-panel-countdowns"
+            :class="activeTab === 'countdowns' ? 'shadow-soft' : ''"
             @click="activeTab = 'countdowns'"
           >
             倒计日 {{ countdownRows.length }}
@@ -190,6 +198,7 @@ const countdownRows = computed<CountdownRow[]>(() =>
           role="tabpanel"
           aria-labelledby="day-detail-tab-basic"
           class="flex flex-col gap-3 pt-1"
+          :class="{ 'animate-tab-in': activeTab === 'basic' }"
         >
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <div
@@ -211,6 +220,7 @@ const countdownRows = computed<CountdownRow[]>(() =>
           role="tabpanel"
           aria-labelledby="day-detail-tab-almanac"
           class="flex flex-col gap-3 pt-1"
+          :class="{ 'animate-tab-in': activeTab === 'almanac' }"
         >
           <div class="flex flex-col gap-1.5">
             <h3 class="text-sm font-medium">宜</h3>
@@ -245,6 +255,7 @@ const countdownRows = computed<CountdownRow[]>(() =>
           role="tabpanel"
           aria-labelledby="day-detail-tab-positions"
           class="flex flex-col gap-3 pt-1"
+          :class="{ 'animate-tab-in': activeTab === 'positions' }"
         >
           <h3 class="text-sm font-medium">神位方位</h3>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -267,6 +278,7 @@ const countdownRows = computed<CountdownRow[]>(() =>
           role="tabpanel"
           aria-labelledby="day-detail-tab-countdowns"
           class="flex flex-col gap-3 pt-1"
+          :class="{ 'animate-tab-in': activeTab === 'countdowns' }"
         >
           <div class="flex items-center justify-between gap-2">
             <h3 class="text-sm font-medium">该日倒计日</h3>

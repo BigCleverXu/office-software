@@ -5,7 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
   --color-background: var(--background);
@@ -45,10 +46,14 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-soft: var(--elevation-soft);
+  --shadow-lift: var(--elevation-lift);
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -80,6 +85,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --elevation-soft:
+    0 1px 2px oklch(0 0 0 / 5%), 0 6px 16px -8px oklch(0 0 0 / 12%);
+  --elevation-lift:
+    0 2px 4px oklch(0 0 0 / 6%), 0 14px 28px -10px oklch(0 0 0 / 18%);
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dark {
@@ -114,6 +124,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --elevation-soft:
+    0 1px 2px oklch(0 0 0 / 40%), 0 6px 18px -8px oklch(0 0 0 / 60%);
+  --elevation-lift:
+    0 2px 6px oklch(0 0 0 / 45%), 0 16px 32px -12px oklch(0 0 0 / 70%);
 }
 
 @layer base {
@@ -141,4 +155,288 @@
   100% {
     transform: translateX(400%);
   }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.app-canvas {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(120% 80% at 100% 0%, oklch(0 0 0 / 4%), transparent 55%),
+    radial-gradient(90% 60% at 0% 100%, oklch(0 0 0 / 3%), transparent 60%);
+}
+
+.dark .app-canvas {
+  background-image:
+    radial-gradient(120% 80% at 100% 0%, oklch(1 0 0 / 5%), transparent 55%),
+    radial-gradient(90% 60% at 0% 100%, oklch(1 0 0 / 3%), transparent 60%);
+}
+
+.animate-fade-up {
+  animation: fade-up 320ms var(--ease-soft) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 220ms ease-out both;
+}
+
+.animate-tab-in {
+  animation: tab-in 180ms ease-out both;
+}
+
+.animate-slide-up {
+  animation: slide-up 260ms var(--ease-soft) both;
+}
+
+.animate-float-soft {
+  animation: float-soft 3.2s ease-in-out infinite;
+}
+
+.card-interactive {
+  transition:
+    transform 200ms var(--ease-soft),
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent),
+    var(--elevation-lift);
+  border-color: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.stagger-list > * {
+  animation: fade-up 320ms var(--ease-soft) both;
+}
+
+.stagger-list > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.stagger-list > *:nth-child(2) {
+  animation-delay: 25ms;
+}
+
+.stagger-list > *:nth-child(3) {
+  animation-delay: 50ms;
+}
+
+.stagger-list > *:nth-child(4) {
+  animation-delay: 75ms;
+}
+
+.stagger-list > *:nth-child(5) {
+  animation-delay: 100ms;
+}
+
+.stagger-list > *:nth-child(6) {
+  animation-delay: 125ms;
+}
+
+.stagger-list > *:nth-child(7) {
+  animation-delay: 150ms;
+}
+
+.stagger-list > *:nth-child(8) {
+  animation-delay: 175ms;
+}
+
+.stagger-list > *:nth-child(9) {
+  animation-delay: 200ms;
+}
+
+.stagger-list > *:nth-child(10) {
+  animation-delay: 225ms;
+}
+
+.stagger-list > *:nth-child(11) {
+  animation-delay: 250ms;
+}
+
+.stagger-list > *:nth-child(12) {
+  animation-delay: 275ms;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--muted) 85%, transparent);
+  color: var(--muted-foreground);
+  animation: float-soft 3.2s ease-in-out infinite;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--muted);
+}
+
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 7%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent)
+    transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--foreground) 18%, transparent);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+[data-slot='button'] {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+[data-slot='button']:active {
+  transform: scale(0.98);
+}
+
+[data-slot='button']:focus-visible,
+a:focus-visible,
+[role='tab']:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--ring) 70%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-tab-in,
+  .animate-slide-up,
+  .animate-float-soft,
+  .stagger-list > *,
+  .empty-state-icon,
+  .skeleton-shimmer::after {
+    animation: none !important;
+  }
+
+  .stagger-list > * {
+    animation-delay: 0ms !important;
+  }
+
+  .card-interactive:hover {
+    transform: none;
+  }
+}
+
+.page-enter-active {
+  transition:
+    opacity 180ms var(--ease-soft),
+    transform 180ms var(--ease-soft);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
 }

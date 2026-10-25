@@ -37,7 +37,7 @@ const visibleItems = computed(() =>
 </script>
 
 <template>
-  <Card>
+  <Card class="card-interactive shadow-soft">
     <CardHeader class="flex flex-row items-center justify-between gap-2">
       <CardTitle class="min-w-0 truncate">{{ view.name }}</CardTitle>
       <Badge variant="secondary" class="shrink-0">
@@ -58,14 +58,14 @@ const visibleItems = computed(() =>
       </p>
 
       <template v-else>
-        <div class="divide-y">
+        <div class="flex flex-col gap-0.5">
           <a
             v-for="(item, index) in visibleItems"
             :key="item.url"
             :href="item.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="group flex gap-2 py-2"
+            class="group hover:bg-muted/60 flex gap-2 rounded-lg px-2 py-2 transition-colors"
           >
             <span
               class="text-muted-foreground w-5 shrink-0 text-xs tabular-nums"

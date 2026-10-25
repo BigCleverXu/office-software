@@ -27,13 +27,14 @@ const selectRegion = (region: MarketRegion): void => {
 </script>
 
 <template>
-  <div class="bg-muted inline-flex rounded-lg p-1">
+  <div class="bg-muted ring-foreground/5 inline-flex rounded-lg p-1 ring-1">
     <Button
       v-for="option in REGION_OPTIONS"
       :key="option.value"
       size="sm"
+      class="transition-all duration-200"
       :variant="region === option.value ? 'secondary' : 'ghost'"
-      :class="region === option.value ? 'shadow-sm' : ''"
+      :class="region === option.value ? 'shadow-soft' : ''"
       :aria-pressed="region === option.value"
       @click="selectRegion(option.value)"
     >

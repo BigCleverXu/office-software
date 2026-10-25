@@ -208,17 +208,18 @@ const handleDetailRemove = (): void => {
       <div
         role="tablist"
         aria-label="日历视图切换"
-        class="bg-muted flex items-center gap-1 rounded-lg p-1"
+        class="bg-muted ring-foreground/5 inline-flex items-center rounded-lg p-1 ring-1"
       >
         <Button
           id="calendar-tab-calendar"
           role="tab"
           size="sm"
-          :variant="activeTab === 'calendar' ? 'default' : 'ghost'"
+          class="transition-all duration-200"
+          :variant="activeTab === 'calendar' ? 'secondary' : 'ghost'"
           :aria-selected="activeTab === 'calendar'"
           :tabindex="activeTab === 'calendar' ? 0 : -1"
           aria-controls="calendar-panel-calendar"
-          :class="activeTab === 'calendar' ? '' : 'text-muted-foreground'"
+          :class="activeTab === 'calendar' ? 'shadow-soft' : ''"
           @click="selectTab('calendar')"
         >
           日历
@@ -227,11 +228,12 @@ const handleDetailRemove = (): void => {
           id="calendar-tab-countdowns"
           role="tab"
           size="sm"
-          :variant="activeTab === 'countdowns' ? 'default' : 'ghost'"
+          class="transition-all duration-200"
+          :variant="activeTab === 'countdowns' ? 'secondary' : 'ghost'"
           :aria-selected="activeTab === 'countdowns'"
           :tabindex="activeTab === 'countdowns' ? 0 : -1"
           aria-controls="calendar-panel-countdowns"
-          :class="activeTab === 'countdowns' ? '' : 'text-muted-foreground'"
+          :class="activeTab === 'countdowns' ? 'shadow-soft' : ''"
           @click="selectTab('countdowns')"
         >
           倒计日
@@ -252,7 +254,9 @@ const handleDetailRemove = (): void => {
         aria-labelledby="calendar-tab-calendar"
         class="min-h-0"
       >
-        <div class="w-full rounded-xl border p-3">
+        <div
+          class="bg-card shadow-soft w-full rounded-2xl border border-border/70 p-4"
+        >
           <MonthCalendar
             v-model:year="year"
             v-model:month="month"
@@ -289,13 +293,18 @@ const handleDetailRemove = (): void => {
 
         <div
           v-if="countdowns.length === 0"
-          class="text-muted-foreground flex flex-col items-center gap-3 py-10"
+          class="empty-state text-muted-foreground py-10"
         >
-          <CalendarDays class="size-10 opacity-40" aria-hidden="true" />
+          <span class="empty-state-icon"
+            ><CalendarDays class="size-6" aria-hidden="true"
+          /></span>
           <p class="text-sm">还没有倒计日，点击新建添加一个吧</p>
         </div>
 
-        <div v-else class="flex flex-col gap-2">
+        <div
+          v-else
+          class="stagger-list grid gap-2 sm:grid-cols-2 xl:grid-cols-3"
+        >
           <CountdownCard
             v-for="countdown in sortedCountdowns"
             :key="countdown.id"

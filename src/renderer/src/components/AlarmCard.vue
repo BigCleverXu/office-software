@@ -30,7 +30,7 @@ const onToggle = (value: boolean): void => emit('toggle', value)
 
 <template>
   <Card
-    class="gap-0 py-0 transition-colors"
+    class="card-interactive shadow-soft gap-0 py-0 transition-colors"
     :class="{ 'opacity-60': !alarm.enabled }"
   >
     <CardContent class="flex items-center gap-4 px-4 py-3">

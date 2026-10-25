@@ -114,7 +114,7 @@ const handleRetry = (): void => {
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="stagger-list grid grid-cols-2 gap-3 lg:grid-cols-4">
           <IndexCard
             v-for="quote in activeSnapshot.indices"
             :key="quote.symbol"
@@ -136,7 +136,9 @@ const handleRetry = (): void => {
       </div>
     </div>
 
-    <footer class="text-muted-foreground border-t px-6 py-2 text-xs">
+    <footer
+      class="bg-muted/30 text-muted-foreground border-t px-6 py-2 text-xs"
+    >
       {{ FOOTER_TEXT }}
     </footer>
 

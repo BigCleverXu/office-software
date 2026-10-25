@@ -8,7 +8,7 @@ defineProps<{
 
 <template>
   <div
-    class="border-border flex items-start justify-between gap-6 border-b py-3 last:border-b-0"
+    class="border-border/60 flex items-start justify-between gap-6 border-b py-3.5 last:border-b-0"
   >
     <div class="flex min-w-0 flex-col gap-0.5">
       <p class="text-sm font-medium">{{ title }}</p>

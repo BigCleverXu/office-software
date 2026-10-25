@@ -142,7 +142,7 @@ defineExpose({ highlight })
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
-      <h2 class="text-sm font-semibold">{{ copy.title }}</h2>
+      <h2 class="text-sm font-semibold tracking-tight">{{ copy.title }}</h2>
       <div class="flex items-center gap-2">
         <span class="text-xs" :class="statusTone">{{ statusText }}</span>
         <Button
@@ -170,9 +170,9 @@ defineExpose({ highlight })
 
     <div
       v-if="watchlist.length === 0"
-      class="text-muted-foreground flex flex-col items-center justify-center gap-3 py-16"
+      class="empty-state text-muted-foreground py-16"
     >
-      <LineChart class="size-10 opacity-40" />
+      <span class="empty-state-icon"><LineChart class="size-6" /></span>
       <p class="text-sm">{{ copy.empty }}</p>
       <Button @click="emit('add')">
         <Plus />
@@ -180,68 +180,76 @@ defineExpose({ highlight })
       </Button>
     </div>
 
-    <div v-else class="overflow-x-auto">
-      <table class="w-full min-w-[760px] text-left text-sm">
-        <thead>
-          <tr class="text-muted-foreground border-b text-xs">
-            <th class="px-2 py-2 font-medium">名称</th>
-            <th class="px-2 py-2 font-medium">代码</th>
-            <th class="px-2 py-2 text-right font-medium">现价</th>
-            <th class="px-2 py-2 text-right font-medium">涨跌额</th>
-            <th class="px-2 py-2 text-right font-medium">涨跌幅</th>
-            <th class="px-2 py-2 text-right font-medium">今开</th>
-            <th class="px-2 py-2 text-right font-medium">最高</th>
-            <th class="px-2 py-2 text-right font-medium">最低</th>
-            <th class="px-2 py-2 text-right font-medium">成交额</th>
-            <th class="px-2 py-2 text-right font-medium">更新时间</th>
-            <th class="w-10 px-2 py-2" />
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in rows"
-            :key="row.item.symbol"
-            class="border-b transition-colors last:border-b-0"
-            :class="{ 'bg-accent/60': highlighted === row.item.symbol }"
-          >
-            <td class="px-2 py-2">
-              <div class="flex flex-col">
-                <span class="font-medium">{{ row.name }}</span>
-                <span v-if="row.missing" class="text-muted-foreground text-xs">
-                  无数据
-                </span>
-              </div>
-            </td>
-            <td class="text-muted-foreground px-2 py-2 tabular-nums">
-              {{ row.code }}
-            </td>
-            <td :class="[TONE_CELL, row.tone]">{{ row.price }}</td>
-            <td :class="[TONE_CELL, row.tone]">{{ row.change }}</td>
-            <td :class="[TONE_CELL, row.tone]">{{ row.changePercent }}</td>
-            <td :class="MUTED_CELL">{{ row.open }}</td>
-            <td :class="MUTED_CELL">{{ row.high }}</td>
-            <td :class="MUTED_CELL">{{ row.low }}</td>
-            <td :class="MUTED_CELL">{{ row.amount }}</td>
-            <td :class="MUTED_CELL">{{ row.time }}</td>
-            <td class="px-2 py-2 text-right">
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    :aria-label="deleteLabel"
-                    class="text-destructive hover:text-destructive"
-                    @click="emit('remove', row.item.symbol)"
+    <div
+      v-else
+      class="bg-card shadow-soft overflow-hidden rounded-xl border border-border/70"
+    >
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[760px] text-left text-sm">
+          <thead>
+            <tr class="bg-muted/50 text-muted-foreground border-b text-xs">
+              <th class="px-2 py-2 font-medium">名称</th>
+              <th class="px-2 py-2 font-medium">代码</th>
+              <th class="px-2 py-2 text-right font-medium">现价</th>
+              <th class="px-2 py-2 text-right font-medium">涨跌额</th>
+              <th class="px-2 py-2 text-right font-medium">涨跌幅</th>
+              <th class="px-2 py-2 text-right font-medium">今开</th>
+              <th class="px-2 py-2 text-right font-medium">最高</th>
+              <th class="px-2 py-2 text-right font-medium">最低</th>
+              <th class="px-2 py-2 text-right font-medium">成交额</th>
+              <th class="px-2 py-2 text-right font-medium">更新时间</th>
+              <th class="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.item.symbol"
+              class="border-b transition-colors hover:bg-muted/40 last:border-b-0"
+              :class="{ 'bg-accent/60': highlighted === row.item.symbol }"
+            >
+              <td class="px-2 py-2">
+                <div class="flex flex-col">
+                  <span class="font-medium">{{ row.name }}</span>
+                  <span
+                    v-if="row.missing"
+                    class="text-muted-foreground text-xs"
                   >
-                    <Trash2 />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>删除</TooltipContent>
-              </Tooltip>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+                    无数据
+                  </span>
+                </div>
+              </td>
+              <td class="text-muted-foreground px-2 py-2 tabular-nums">
+                {{ row.code }}
+              </td>
+              <td :class="[TONE_CELL, row.tone]">{{ row.price }}</td>
+              <td :class="[TONE_CELL, row.tone]">{{ row.change }}</td>
+              <td :class="[TONE_CELL, row.tone]">{{ row.changePercent }}</td>
+              <td :class="MUTED_CELL">{{ row.open }}</td>
+              <td :class="MUTED_CELL">{{ row.high }}</td>
+              <td :class="MUTED_CELL">{{ row.low }}</td>
+              <td :class="MUTED_CELL">{{ row.amount }}</td>
+              <td :class="MUTED_CELL">{{ row.time }}</td>
+              <td class="px-2 py-2 text-right">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      :aria-label="deleteLabel"
+                      class="text-destructive hover:text-destructive"
+                      @click="emit('remove', row.item.symbol)"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>删除</TooltipContent>
+                </Tooltip>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>

@@ -88,7 +88,7 @@ const handleRemove = (note: Note): void => {
   <div class="flex h-full flex-col">
     <div class="flex flex-col gap-2 px-6 py-4">
       <div class="flex items-center justify-between gap-3">
-        <div class="relative w-full max-w-xs">
+        <div class="relative w-full max-w-xs transition-all duration-200">
           <Search
             class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
             aria-hidden="true"
@@ -107,20 +107,24 @@ const handleRemove = (note: Note): void => {
       </div>
 
       <p class="text-muted-foreground text-sm">
-        共 {{ notes.length }} 条便签 · {{ pinnedCount }} 条置顶
+        共
+        <span class="text-foreground font-medium">{{ notes.length }}</span>
+        条便签 ·
+        <span class="text-foreground font-medium">{{ pinnedCount }}</span>
+        条置顶
       </p>
     </div>
 
     <div class="flex-1 overflow-y-auto px-6 pb-6">
       <div
         v-if="filteredNotes.length === 0"
-        class="text-muted-foreground flex h-full flex-col items-center justify-center gap-3"
+        class="empty-state text-muted-foreground h-full"
       >
-        <StickyNote class="size-10 opacity-40" />
+        <span class="empty-state-icon"><StickyNote class="size-6" /></span>
         <p class="text-sm">{{ emptyText }}</p>
       </div>
 
-      <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div v-else class="stagger-list grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <NoteCard
           v-for="note in filteredNotes"
           :key="note.id"

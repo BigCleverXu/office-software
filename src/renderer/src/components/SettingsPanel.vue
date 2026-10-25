@@ -140,9 +140,9 @@ const handleCheckUpdate = (): void => {
   <div class="h-full overflow-y-auto">
     <div
       v-if="settings"
-      class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6"
+      class="stagger-list mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6"
     >
-      <Card>
+      <Card class="shadow-soft">
         <CardHeader>
           <CardTitle>通用</CardTitle>
           <CardDescription>应用启动与系统行为</CardDescription>
@@ -163,7 +163,7 @@ const handleCheckUpdate = (): void => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card class="shadow-soft">
         <CardHeader>
           <CardTitle>外观</CardTitle>
           <CardDescription>界面配色，切换后立即生效</CardDescription>
@@ -196,7 +196,7 @@ const handleCheckUpdate = (): void => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card class="shadow-soft">
         <CardHeader>
           <CardTitle>数据</CardTitle>
           <CardDescription>本地数据位置与备份</CardDescription>
@@ -254,7 +254,7 @@ const handleCheckUpdate = (): void => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card class="shadow-soft">
         <CardHeader>
           <CardTitle>关于</CardTitle>
           <CardDescription>版本信息与更新检查</CardDescription>
@@ -283,7 +283,10 @@ const handleCheckUpdate = (): void => {
       </Card>
     </div>
 
-    <div v-else class="flex h-full flex-col items-center justify-center gap-3">
+    <div
+      v-else
+      class="animate-fade-in flex h-full flex-col items-center justify-center gap-3"
+    >
       <Loader2
         v-if="loading"
         class="text-muted-foreground size-6 animate-spin"

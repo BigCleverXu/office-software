@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLocalStorage, usePreferredDark } from '@vueuse/core'
-import { Loader2 } from 'lucide-vue-next'
+import { Loader2, Settings } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import { DEFAULT_MODULE } from '@shared/navigation'
 import type { AppTheme } from '@shared/settings'
@@ -30,6 +30,11 @@ const { isDownloading: updateDownloading, progress: updateDownloadProgress } =
 const preferredDark = usePreferredDark()
 
 const currentModule = computed(() => moduleById(active.value))
+
+/** 顶栏模块徽章图标：设置页使用齿轮，其余沿用当前模块图标 */
+const headerIcon = computed(() =>
+  showSettings.value ? Settings : currentModule.value.icon
+)
 
 const pageTitle = computed(() =>
   showSettings.value ? '设置' : currentModule.value.label
@@ -103,24 +108,33 @@ onUnmounted(() => {
       />
 
       <div class="flex min-w-0 flex-1 flex-col">
-        <header class="flex h-14 shrink-0 items-center border-b px-6">
+        <header
+          class="border-border/60 bg-background/80 flex h-14 shrink-0 items-center gap-3 border-b px-6 backdrop-blur"
+        >
+          <div
+            class="bg-muted text-foreground ring-foreground/5 shadow-soft flex size-9 shrink-0 items-center justify-center rounded-lg ring-1"
+          >
+            <component :is="headerIcon" class="size-4" />
+          </div>
           <div class="flex flex-col">
-            <h1 class="text-base leading-tight font-semibold">
+            <h1 class="text-lg leading-tight font-semibold tracking-tight">
               {{ pageTitle }}
             </h1>
             <p class="text-muted-foreground text-xs">{{ pageDescription }}</p>
           </div>
         </header>
 
-        <div class="flex-1 overflow-hidden">
-          <SettingsPanel v-if="showSettings" />
-          <component
-            :is="module.component"
-            v-for="module in MODULES"
-            v-show="!showSettings && active === module.id"
-            :key="module.id"
-            class="h-full"
-          />
+        <div class="app-canvas flex-1 overflow-hidden">
+          <SettingsPanel v-if="showSettings" class="animate-fade-in" />
+          <template v-for="module in MODULES" :key="module.id">
+            <Transition name="page">
+              <component
+                :is="module.component"
+                v-show="!showSettings && active === module.id"
+                class="h-full"
+              />
+            </Transition>
+          </template>
         </div>
       </div>
     </div>
@@ -136,7 +150,7 @@ onUnmounted(() => {
     <button
       v-if="updateDownloading && !updateOpen"
       type="button"
-      class="bg-background fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-lg"
+      class="bg-background animate-slide-up shadow-lift fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-lg"
       @click="updateOpen = true"
     >
       <Loader2 class="size-4 animate-spin" />

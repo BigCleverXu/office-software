@@ -26,6 +26,8 @@ interface NavItem {
   id: AppModuleId
   label: string
   icon: Component
+  /** 是否为当前选中项 */
+  active: boolean
   /** 选中 / 未选中态对应的类名 */
   itemClass: string
 }
@@ -36,9 +38,10 @@ const navItems = computed<NavItem[]>(() =>
     id: module.id,
     label: module.label,
     icon: module.icon,
+    active: module.id === props.active,
     itemClass:
       module.id === props.active
-        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-soft'
         : [
             'text-sidebar-foreground/70',
             'hover:bg-sidebar-accent/60',
@@ -50,7 +53,7 @@ const navItems = computed<NavItem[]>(() =>
 /** 设置入口的选中 / 未选中态类名 */
 const settingsItemClass = computed(() =>
   props.settingsActive
-    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-soft'
     : [
         'text-sidebar-foreground/70',
         'hover:bg-sidebar-accent/60',
@@ -68,11 +71,14 @@ const settingsItemClass = computed(() =>
       class="flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border px-3"
     >
       <div
-        class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg"
+        class="from-foreground to-foreground/75 text-background ring-foreground/10 shadow-soft flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ring-1"
       >
         <Bell class="size-4" />
       </div>
-      <span v-if="!collapsed" class="truncate text-sm font-semibold">
+      <span
+        v-if="!collapsed"
+        class="animate-fade-in truncate text-sm font-semibold"
+      >
         定时提醒
       </span>
     </div>
@@ -85,10 +91,14 @@ const settingsItemClass = computed(() =>
               type="button"
               :aria-label="item.label"
               :title="item.label"
-              class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+              class="relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200"
               :class="item.itemClass"
               @click="emit('select', item.id)"
             >
+              <span
+                v-if="item.active"
+                class="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full"
+              />
               <component :is="item.icon" class="size-4 shrink-0" />
             </button>
           </TooltipTrigger>
@@ -98,10 +108,14 @@ const settingsItemClass = computed(() =>
         <button
           v-else
           type="button"
-          class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+          class="relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200"
           :class="item.itemClass"
           @click="emit('select', item.id)"
         >
+          <span
+            v-if="item.active"
+            class="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full"
+          />
           <component :is="item.icon" class="size-4 shrink-0" />
           <span class="truncate">{{ item.label }}</span>
         </button>
@@ -115,10 +129,14 @@ const settingsItemClass = computed(() =>
             type="button"
             aria-label="设置"
             title="设置"
-            class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+            class="relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200"
             :class="settingsItemClass"
             @click="emit('settings')"
           >
+            <span
+              v-if="settingsActive"
+              class="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full"
+            />
             <Settings class="size-4 shrink-0" />
           </button>
         </TooltipTrigger>
@@ -128,17 +146,21 @@ const settingsItemClass = computed(() =>
       <button
         v-else
         type="button"
-        class="flex items-center gap-3 rounded-md px-3 py-2 text-sm"
+        class="relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200"
         :class="settingsItemClass"
         @click="emit('settings')"
       >
+        <span
+          v-if="settingsActive"
+          class="bg-sidebar-primary absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full"
+        />
         <Settings class="size-4 shrink-0" />
         <span class="truncate">设置</span>
       </button>
 
       <button
         type="button"
-        class="text-muted-foreground hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:text-sidebar-accent-foreground"
+        class="text-muted-foreground hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 hover:text-sidebar-accent-foreground"
         @click="emit('toggle')"
       >
         <PanelLeftClose v-if="!collapsed" class="size-4 shrink-0" />

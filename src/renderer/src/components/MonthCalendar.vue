@@ -222,15 +222,16 @@ function cellClass(cell: MonthCell, index: number): string[] {
   const selected = props.selectedDate === cell.date
   return [
     'relative flex min-h-[88px] flex-col items-start gap-0.5',
-    'overflow-hidden rounded-lg border border-transparent p-1.5 text-left',
-    'transition-colors',
+    'overflow-hidden rounded-lg border border-transparent p-1.5 text-left transition-all duration-200',
     cell.inMonth ? '' : 'text-muted-foreground/40 cursor-default',
-    cell.inMonth && !selected ? 'hover:bg-muted' : '',
+    cell.inMonth && !selected
+      ? 'hover:border-foreground/10 hover:bg-muted'
+      : '',
     cell.inMonth && isWeekend(index) && !selected ? 'bg-muted/40' : '',
     cell.inMonth && cell.date === todayKey && !selected
       ? 'ring-1 ring-primary/60'
       : '',
-    selected ? 'bg-primary text-primary-foreground' : ''
+    selected ? 'bg-primary text-primary-foreground shadow-soft' : ''
   ]
 }
 </script>

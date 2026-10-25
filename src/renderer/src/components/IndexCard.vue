@@ -34,7 +34,7 @@ const updatedText = computed(() => props.updatedAtLabel ?? '--')
 </script>
 
 <template>
-  <Card class="gap-0 py-0">
+  <Card class="card-interactive shadow-soft gap-0 py-0">
     <CardContent class="flex flex-col gap-1.5 px-4 py-3">
       <span class="text-muted-foreground text-xs">{{ name }}</span>
       <span class="font-mono text-xl font-semibold tabular-nums" :class="tone">

@@ -50,7 +50,11 @@ const handleRemove = (alarm: Alarm): void => {
   <div class="flex h-full flex-col">
     <div class="flex items-center justify-between px-6 py-4">
       <p class="text-muted-foreground text-sm">
-        共 {{ alarms.length }} 条提醒 · {{ enabledCount }} 条已启用
+        共
+        <span class="text-foreground font-medium">{{ alarms.length }}</span>
+        条提醒 ·
+        <span class="text-foreground font-medium">{{ enabledCount }}</span>
+        条已启用
       </p>
       <Button size="sm" @click="openCreate">
         <Plus data-icon="inline-start" />
@@ -61,13 +65,13 @@ const handleRemove = (alarm: Alarm): void => {
     <div class="flex-1 overflow-y-auto px-6 py-2">
       <div
         v-if="alarms.length === 0"
-        class="text-muted-foreground flex h-full flex-col items-center justify-center gap-3"
+        class="empty-state text-muted-foreground h-full"
       >
-        <AlarmClock class="size-10 opacity-40" />
+        <span class="empty-state-icon"><AlarmClock class="size-6" /></span>
         <p class="text-sm">还没有提醒，点击右上角新建一个吧</p>
       </div>
 
-      <div v-else class="flex flex-col gap-2">
+      <div v-else class="stagger-list flex flex-col gap-2">
         <AlarmCard
           v-for="alarm in alarms"
           :key="alarm.id"
@@ -79,7 +83,9 @@ const handleRemove = (alarm: Alarm): void => {
       </div>
     </div>
 
-    <footer class="text-muted-foreground border-t px-6 py-2 text-xs">
+    <footer
+      class="bg-muted/30 text-muted-foreground border-t px-6 py-2 text-xs"
+    >
       关闭窗口后应用会常驻系统托盘，并在到点时弹出系统通知。
     </footer>
 
