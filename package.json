@@ -1,6 +1,6 @@
 {
   "name": "reminder-app",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "An Electron application with Vue and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -29,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-vue-next": "^1.0.0",
+    "lunar-typescript": "^1.8.6",
     "reka-ui": "^2.11.0",
     "shadcn-vue": "^2.8.2",
     "tailwind-merge": "^3.7.0",

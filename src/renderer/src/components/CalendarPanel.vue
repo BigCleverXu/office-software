@@ -5,6 +5,8 @@ import type { Countdown, CountdownDraft, MonthCell } from '@shared/calendar'
 import CountdownCard from '@/components/CountdownCard.vue'
 import CountdownDetailDialog from '@/components/CountdownDetailDialog.vue'
 import CountdownFormDialog from '@/components/CountdownFormDialog.vue'
+import DayContextMenu from '@/components/DayContextMenu.vue'
+import DayDetailDialog from '@/components/DayDetailDialog.vue'
 import MonthCalendar from '@/components/MonthCalendar.vue'
 import { Button } from '@/components/ui/button'
 import { useCalendar } from '@/composables/useCalendar'
@@ -63,6 +65,24 @@ const countdownsByDate = computed<Record<string, Countdown[]>>(() => {
   return map
 })
 
+/** 右键菜单状态：坐标与目标日期 */
+const menuOpen = ref(false)
+const menuX = ref(0)
+const menuY = ref(0)
+const menuDate = ref<string | null>(null)
+
+/** 日期详情弹窗状态 */
+const dayDetailOpen = ref(false)
+const dayDetailDate = ref<string | null>(null)
+
+/** 日期详情弹窗展示的该日倒计日 */
+const dayCountdowns = computed(
+  () =>
+    (dayDetailDate.value
+      ? countdownsByDate.value[dayDetailDate.value]
+      : undefined) ?? []
+)
+
 const dialogOpen = ref(false)
 const editing = ref<Countdown | null>(null)
 
@@ -94,6 +114,41 @@ const handleCreateAt = (cell: MonthCell): void => {
   dialogOpen.value = true
 }
 
+/** 右键单元格：记录菜单坐标与目标日期 */
+const handleContextMenu = (payload: {
+  cell: MonthCell
+  x: number
+  y: number
+}): void => {
+  menuX.value = payload.x
+  menuY.value = payload.y
+  menuDate.value = payload.cell.date
+  menuOpen.value = true
+}
+
+/** 右键菜单新建：关闭菜单后复用该日期新建 */
+const handleMenuCreate = (): void => {
+  const date = menuDate.value
+  menuOpen.value = false
+  if (!date) return
+  handleCreateAt({ date, day: Number(date.slice(8, 10)), inMonth: true })
+}
+
+/** 右键菜单查看详情 */
+const handleMenuDetail = (): void => {
+  menuOpen.value = false
+  dayDetailDate.value = menuDate.value
+  dayDetailOpen.value = true
+}
+
+/** 详情弹窗新建：关闭详情后复用该日期新建 */
+const handleDayCreate = (): void => {
+  const date = dayDetailDate.value
+  dayDetailOpen.value = false
+  if (!date) return
+  handleCreateAt({ date, day: Number(date.slice(8, 10)), inMonth: true })
+}
+
 const openEdit = (countdown: Countdown): void => {
   editing.value = countdown
   dialogOpen.value = true
@@ -118,6 +173,12 @@ const handleRemove = (countdown: Countdown): void => {
 const openDetail = (countdown: Countdown): void => {
   detailTarget.value = countdown
   detailOpen.value = true
+}
+
+/** 详情弹窗打开倒计日：先关闭详情，避免两个弹窗叠加 */
+const handleDayOpenCountdown = (countdown: Countdown): void => {
+  dayDetailOpen.value = false
+  openDetail(countdown)
 }
 
 /** 详情中编辑：关闭详情并复用表单的编辑模式 */
@@ -199,7 +260,7 @@ const handleDetailRemove = (): void => {
             :selected-date="selectedDate"
             :countdowns-by-date="countdownsByDate"
             @select="handleSelect"
-            @create="handleCreateAt"
+            @context-menu="handleContextMenu"
             @open-countdown="openDetail"
           />
         </div>
@@ -258,6 +319,23 @@ const handleDetailRemove = (): void => {
       :countdown="detailTarget"
       @edit="handleDetailEdit"
       @remove="handleDetailRemove"
+    />
+
+    <DayContextMenu
+      v-model:open="menuOpen"
+      :x="menuX"
+      :y="menuY"
+      :date="menuDate ?? ''"
+      @create="handleMenuCreate"
+      @detail="handleMenuDetail"
+    />
+
+    <DayDetailDialog
+      v-model:open="dayDetailOpen"
+      :date="dayDetailDate"
+      :countdowns="dayCountdowns"
+      @create="handleDayCreate"
+      @open-countdown="handleDayOpenCountdown"
     />
   </div>
 </template>

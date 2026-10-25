@@ -9,6 +9,7 @@ import type {
   MonthCell
 } from '@shared/calendar'
 import { Button } from '@/components/ui/button'
+import { getLunarLabel } from '@/lib/almanac'
 
 /** 单元格内直接展示的倒计日条数上限 */
 const MAX_VISIBLE_COUNTDOWNS = 2
@@ -31,7 +32,7 @@ const emit = defineEmits<{
   'update:year': [year: number]
   'update:month': [month: number]
   select: [cell: MonthCell]
-  create: [cell: MonthCell]
+  'context-menu': [payload: { cell: MonthCell; x: number; y: number }]
   'open-countdown': [countdown: Countdown]
 }>()
 
@@ -72,6 +73,24 @@ const holidayMap = computed<Record<string, HolidayEntry>>(() => {
 })
 
 const monthLabel = computed(() => `${props.year} 年 ${props.month} 月`)
+
+/** 当前网格的农历文案，按日期建索引，避免模板内重复计算 */
+const lunarLabels = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  for (const cell of grid.value) {
+    if (!cell.inMonth) continue
+    const label = getLunarLabel(cell.date)
+    if (label) {
+      map[cell.date] = label
+    }
+  }
+  return map
+})
+
+/** 查询某日的农历文案，无文案返回空字符串 */
+function lunarLabelOf(date: string): string {
+  return lunarLabels.value[date] ?? ''
+}
 
 /** 查询某日的节假日记录，无记录返回 null */
 function holidayOf(date: string): HolidayEntry | null {
@@ -192,10 +211,10 @@ function isWeekend(index: number): boolean {
   return index % 7 >= 5
 }
 
-/** 右键当月单元格新建倒计日；补位单元格仅拦截默认菜单 */
-function handleContextMenu(cell: MonthCell): void {
+/** 右键当月单元格发出菜单事件；补位单元格仅拦截默认菜单 */
+function handleContextMenu(cell: MonthCell, event: MouseEvent): void {
   if (!cell.inMonth) return
-  emit('create', cell)
+  emit('context-menu', { cell, x: event.clientX, y: event.clientY })
 }
 
 /** 单元格样式：补位、周末、今天、选中分别为独立静态类名 */
@@ -266,13 +285,25 @@ function cellClass(cell: MonthCell, index: number): string[] {
         :aria-pressed="selectedDate === cell.date"
         :class="cellClass(cell, index)"
         @click="emit('select', cell)"
-        @contextmenu.prevent="handleContextMenu(cell)"
+        @contextmenu.prevent="handleContextMenu(cell, $event)"
       >
         <span
           class="text-xs font-medium tabular-nums"
           :class="dayClass(cell, index)"
         >
           {{ cell.day }}
+        </span>
+
+        <span
+          v-if="cell.inMonth && lunarLabelOf(cell.date)"
+          class="w-full min-w-0 truncate text-[10px] leading-4"
+          :class="
+            isSelected(cell.date)
+              ? 'text-primary-foreground/80'
+              : 'text-muted-foreground'
+          "
+        >
+          {{ lunarLabelOf(cell.date) }}
         </span>
 
         <span
