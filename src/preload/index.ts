@@ -9,6 +9,7 @@ import {
 import {
   MARKET_CHANNELS,
   type MarketApi,
+  type MarketRegion,
   type MarketState
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
@@ -80,6 +81,8 @@ const market: MarketApi = {
     ipcRenderer.invoke(MARKET_CHANNELS.setPaused, paused),
   setLastPage: (page: AppModuleId) =>
     ipcRenderer.invoke(MARKET_CHANNELS.setLastPage, page),
+  setRegion: (region: MarketRegion) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.setRegion, region),
   onStateChanged: (callback: (state: MarketState) => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

@@ -21,7 +21,8 @@ export const SCHEMA_VERSION = 3
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
   paused: false,
-  lastPage: DEFAULT_MODULE
+  lastPage: DEFAULT_MODULE,
+  region: 'cn'
 }
 
 /** notes 表建表语句（v2 新增，也用于 v1 升级） */
@@ -270,7 +271,8 @@ function normalizeSettings(raw: unknown): MarketSettings {
   const record = raw as Partial<MarketSettings>
   return {
     paused: typeof record.paused === 'boolean' ? record.paused : false,
-    lastPage: isAppModuleId(record.lastPage) ? record.lastPage : DEFAULT_MODULE
+    lastPage: isAppModuleId(record.lastPage) ? record.lastPage : DEFAULT_MODULE,
+    region: DEFAULT_MARKET_SETTINGS.region
   }
 }
 

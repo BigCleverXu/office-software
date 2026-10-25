@@ -43,7 +43,8 @@ describe('MarketStore 空库', () => {
     expect(store.getWatchlist()).toEqual([])
     expect(store.getSettings()).toEqual({
       paused: false,
-      lastPage: DEFAULT_MODULE
+      lastPage: DEFAULT_MODULE,
+      region: 'cn'
     })
   })
 })
@@ -124,21 +125,38 @@ describe('MarketStore.has', () => {
   })
 })
 
+const tesla: WatchInput = {
+  code: 'TSLA',
+  symbol: 'usTSLA',
+  market: 'us',
+  name: '特斯拉'
+}
+
+const apple: WatchInput = {
+  code: 'AAPL',
+  symbol: 'usAAPL',
+  market: 'us',
+  name: '苹果'
+}
+
 describe('MarketStore 设置', () => {
   it('setPaused / setLastPage 持久化，重新读取一致', () => {
     expect(store.setPaused(true)).toEqual({
       paused: true,
-      lastPage: DEFAULT_MODULE
+      lastPage: DEFAULT_MODULE,
+      region: 'cn'
     })
     expect(store.setLastPage('market')).toEqual({
       paused: true,
-      lastPage: 'market'
+      lastPage: 'market',
+      region: 'cn'
     })
 
     const reloaded = new MarketStore(db)
     expect(reloaded.getSettings()).toEqual({
       paused: true,
-      lastPage: 'market'
+      lastPage: 'market',
+      region: 'cn'
     })
   })
 
@@ -146,7 +164,11 @@ describe('MarketStore 设置', () => {
     store.setLastPage('market')
 
     const merged = store.updateSettings({ paused: true })
-    expect(merged).toEqual({ paused: true, lastPage: 'market' })
+    expect(merged).toEqual({
+      paused: true,
+      lastPage: 'market',
+      region: 'cn'
+    })
     expect(new MarketStore(db).getSettings()).toEqual(merged)
   })
 
@@ -167,7 +189,77 @@ describe('MarketStore 设置', () => {
 
     expect(store.getSettings()).toEqual({
       paused: false,
-      lastPage: DEFAULT_MODULE
+      lastPage: DEFAULT_MODULE,
+      region: 'cn'
     })
+  })
+})
+
+describe('MarketStore 区域设置', () => {
+  it('默认 region 为 cn', () => {
+    const settings = store.getSettings()
+    expect(settings.region).toBe('cn')
+  })
+
+  it('写入美股区域后可读回', () => {
+    const updated = store.updateSettings({ region: 'us' })
+    expect(updated.region).toBe('us')
+
+    const reloaded = new MarketStore(db).getSettings()
+    expect(reloaded.region).toBe('us')
+  })
+
+  it('后续更新 paused 不会丢失 region', () => {
+    store.updateSettings({ region: 'us' })
+
+    const paused = store.updateSettings({ paused: true })
+    expect(paused.paused).toBe(true)
+    expect(paused.region).toBe('us')
+    expect(new MarketStore(db).getSettings()).toEqual(paused)
+  })
+
+  it('非法 region 取值回落默认', () => {
+    const insert = db.prepare(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
+    )
+    insert.run('region', '"mars"')
+
+    expect(store.getSettings()).toEqual({
+      paused: false,
+      lastPage: DEFAULT_MODULE,
+      region: 'cn'
+    })
+  })
+
+  it('非法 JSON 的 region 也回落默认', () => {
+    const insert = db.prepare(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
+    )
+    insert.run('region', '{')
+
+    expect(store.getSettings().region).toBe('cn')
+  })
+})
+
+describe('MarketStore.getWatchlistByMarket', () => {
+  it('只返回指定市场条目且按 sortOrder 排序', () => {
+    store.addWatch(tesla)
+    store.addWatch(maotai)
+    store.addWatch(apple)
+    store.addWatch(pingan)
+
+    expect(store.getWatchlistByMarket('us').map((item) => item.symbol)).toEqual(
+      ['usTSLA', 'usAAPL']
+    )
+    expect(store.getWatchlistByMarket('sh').map((item) => item.symbol)).toEqual(
+      ['sh600519']
+    )
+    expect(store.getWatchlistByMarket('sz').map((item) => item.symbol)).toEqual(
+      ['sz000001']
+    )
+  })
+
+  it('空库时返回空数组', () => {
+    expect(store.getWatchlistByMarket('us')).toEqual([])
   })
 })

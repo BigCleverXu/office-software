@@ -3,19 +3,27 @@ import {
   closedReasonText,
   codeFromSymbol,
   directionOf,
+  etParts,
   formatAmount,
   formatClockTime,
   formatDateLabel,
   formatPercent,
   formatPrice,
   formatSigned,
+  indexNameOf,
+  indexSymbolsOf,
+  isMarketRegion,
   isSameTradingSession,
   isTradingDay,
   isTradingTime,
   marketFromSymbol,
   nextOpenAt,
+  nextUsOpenStart,
   normalizeCode,
-  symbolFromCode
+  normalizeUsSymbol,
+  symbolFromCode,
+  usClosedReason,
+  usMarketOpen
 } from './market'
 
 // 2026-01-05 周一、01-06 周二、01-09 周五
@@ -317,5 +325,177 @@ describe('formatDateLabel', () => {
   it('固定日期输出 MM-DD 并补零', () => {
     expect(formatDateLabel(new Date(2026, 0, 5))).toBe('01-05')
     expect(formatDateLabel(new Date(2026, 11, 31))).toBe('12-31')
+  })
+})
+
+// ---------- 美股：时段 / 符号 / 指数 ----------
+
+/** 构造固定 UTC 时刻，避免依赖运行机器的时区 */
+function utc(iso: string): Date {
+  return new Date(`${iso}Z`)
+}
+
+describe('usMarketOpen', () => {
+  // 2025-07-15 周二，美东夏令时 EDT = UTC-4
+  // 2025-01-15 周三，美东冬令时 EST = UTC-5
+  it('夏令时下 09:30 开盘、16:00 收盘（左闭右开）', () => {
+    expect(usMarketOpen(utc('2025-07-15T13:29:00'))).toBe(false) // 09:29
+    expect(usMarketOpen(utc('2025-07-15T13:30:00'))).toBe(true) // 09:30
+    expect(usMarketOpen(utc('2025-07-15T19:59:00'))).toBe(true) // 15:59
+    expect(usMarketOpen(utc('2025-07-15T20:00:00'))).toBe(false) // 16:00
+  })
+
+  it('周六、周日全天返回 false', () => {
+    expect(usMarketOpen(utc('2025-07-19T14:00:00'))).toBe(false)
+    expect(usMarketOpen(utc('2025-07-19T23:00:00'))).toBe(false)
+    expect(usMarketOpen(utc('2025-07-20T13:30:00'))).toBe(false)
+  })
+
+  it('冬令时 EST 换算同样正确', () => {
+    expect(usMarketOpen(utc('2025-01-15T14:30:00'))).toBe(true) // 09:30
+    expect(usMarketOpen(utc('2025-01-15T20:59:00'))).toBe(true) // 15:59
+    expect(usMarketOpen(utc('2025-01-15T21:00:00'))).toBe(false) // 16:00
+  })
+})
+
+describe('etParts', () => {
+  it('夏令时返回与美东墙上时间一致的字段', () => {
+    expect(etParts(utc('2025-07-15T13:30:00'))).toEqual({
+      year: 2025,
+      month: 7,
+      day: 15,
+      hour: 9,
+      minute: 30,
+      weekday: 2
+    })
+  })
+
+  it('冬令时返回与美东墙上时间一致的字段', () => {
+    expect(etParts(utc('2025-01-15T15:00:00'))).toEqual({
+      year: 2025,
+      month: 1,
+      day: 15,
+      hour: 10,
+      minute: 0,
+      weekday: 3
+    })
+  })
+})
+
+describe('nextUsOpenStart', () => {
+  it('工作日开盘前 → 当天 09:30', () => {
+    const now = utc('2025-07-15T12:00:00') // 美东 08:00
+    const next = nextUsOpenStart(now)
+    expect(next.at).toBe(utc('2025-07-15T13:30:00').getTime())
+    expect(next.at).toBeGreaterThan(now.getTime())
+    expect(next.label).toBe('09:30 开盘')
+  })
+
+  it('工作日盘中 → 下一个工作日 09:30，label 带日期', () => {
+    const now = utc('2025-07-15T14:00:00') // 美东周二 10:00
+    const next = nextUsOpenStart(now)
+    expect(next.at).toBe(utc('2025-07-16T13:30:00').getTime())
+    expect(next.at).toBeGreaterThan(now.getTime())
+    expect(next.label).toBe('07-16 09:30 开盘')
+  })
+
+  it('周五收盘后 → 下周一 09:30', () => {
+    const now = utc('2025-07-18T21:00:00') // 美东周五 17:00
+    const next = nextUsOpenStart(now)
+    expect(next.at).toBe(utc('2025-07-21T13:30:00').getTime())
+    expect(next.at).toBeGreaterThan(now.getTime())
+    expect(next.label).toBe('07-21 09:30 开盘')
+  })
+})
+
+describe('usClosedReason', () => {
+  it('周末休市', () => {
+    expect(usClosedReason(utc('2025-07-19T18:00:00'))).toBe('周末休市')
+  })
+
+  it('工作日开盘前', () => {
+    // 美东周三 08:00
+    expect(usClosedReason(utc('2025-01-15T13:00:00'))).toBe('开盘前')
+  })
+
+  it('工作日收盘后', () => {
+    // 美东周三 17:00
+    expect(usClosedReason(utc('2025-01-15T22:00:00'))).toBe('已收盘')
+  })
+
+  it('开盘时段内返回空字符串', () => {
+    expect(usClosedReason(utc('2025-07-15T13:30:00'))).toBe('')
+    expect(usClosedReason(utc('2025-07-15T19:59:00'))).toBe('')
+  })
+})
+
+describe('normalizeUsSymbol', () => {
+  it('小写 ticker 转大写并拼上 us 前缀', () => {
+    expect(normalizeUsSymbol('aapl')).toEqual({
+      code: 'AAPL',
+      symbol: 'usAAPL',
+      market: 'us'
+    })
+  })
+
+  it('带点号与首尾空格的 ticker 合法', () => {
+    expect(normalizeUsSymbol(' brk.b ')).toEqual({
+      code: 'BRK.B',
+      symbol: 'usBRK.B',
+      market: 'us'
+    })
+  })
+
+  it('首字符非字母、空串、超长或含空格返回 null', () => {
+    expect(normalizeUsSymbol('1ABC')).toBeNull()
+    expect(normalizeUsSymbol('')).toBeNull()
+    expect(normalizeUsSymbol('TOOLONGTICKER')).toBeNull()
+    expect(normalizeUsSymbol('A B')).toBeNull()
+  })
+})
+
+describe('美股 symbol 互转', () => {
+  it('codeFromSymbol / marketFromSymbol 支持 us 前缀', () => {
+    expect(codeFromSymbol('usAAPL')).toBe('AAPL')
+    expect(marketFromSymbol('usAAPL')).toBe('us')
+  })
+
+  it('A 股行为保持不变', () => {
+    expect(codeFromSymbol('sh600519')).toBe('600519')
+    expect(codeFromSymbol('sz000001')).toBe('000001')
+    expect(marketFromSymbol('sh600519')).toBe('sh')
+    expect(marketFromSymbol('sz000001')).toBe('sz')
+  })
+})
+
+describe('按市场取指数', () => {
+  it('indexSymbolsOf(us) 返回美股四指数且顺序固定', () => {
+    expect(indexSymbolsOf('us')).toEqual(['usDJI', 'usIXIC', 'usNDX', 'usINX'])
+    expect(indexSymbolsOf('us')).toHaveLength(4)
+  })
+
+  it('indexSymbolsOf(cn) 仍为 A 股三指数', () => {
+    expect(indexSymbolsOf('cn')).toEqual(['sh000001', 'sz399001', 'sz399006'])
+  })
+
+  it('indexNameOf 返回中美指数中文名', () => {
+    expect(indexNameOf('usDJI')).toBe('道琼斯')
+    expect(indexNameOf('usIXIC')).toBe('纳斯达克')
+    expect(indexNameOf('usNDX')).toBe('纳斯达克100')
+    expect(indexNameOf('usINX')).toBe('标普500')
+    expect(indexNameOf('sh000001')).toBe('上证指数')
+  })
+})
+
+describe('isMarketRegion', () => {
+  it('合法值返回 true', () => {
+    expect(isMarketRegion('cn')).toBe(true)
+    expect(isMarketRegion('us')).toBe(true)
+  })
+
+  it('非法值返回 false', () => {
+    expect(isMarketRegion('mars')).toBe(false)
+    expect(isMarketRegion('')).toBe(false)
+    expect(isMarketRegion(null)).toBe(false)
   })
 })

@@ -3,8 +3,11 @@
 
 import type { AppModuleId } from './navigation'
 
-/** 市场标识 */
-export type MarketId = 'sh' | 'sz'
+/** 市场标识：沪 / 深 / 美 */
+export type MarketId = 'sh' | 'sz' | 'us'
+
+/** 市场区域：中国 / 美国 */
+export type MarketRegion = 'cn' | 'us'
 
 /** 单只标的的行情快照 */
 export interface Quote {
@@ -54,6 +57,8 @@ export interface WatchItem {
 export interface MarketSettings {
   paused: boolean
   lastPage: AppModuleId
+  /** 当前选中的市场，默认 'cn' */
+  region: MarketRegion
 }
 
 /** 行情页整体状态 */
@@ -90,7 +95,10 @@ export interface MarketSnapshot {
 }
 
 export interface MarketState {
+  /** A 股（中国）快照，字段与现在完全一致 */
   snapshot: MarketSnapshot
+  /** 美股快照 */
+  us: MarketSnapshot
   watchlist: WatchItem[]
   settings: MarketSettings
 }
@@ -103,6 +111,7 @@ export const MARKET_CHANNELS = {
   refreshNow: 'market:refresh-now',
   setPaused: 'market:set-paused',
   setLastPage: 'market:set-last-page',
+  setRegion: 'market:set-region',
   stateChanged: 'market:state-changed',
   navigate: 'market:navigate'
 } as const
@@ -123,6 +132,7 @@ export interface MarketApi {
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<void>
   setLastPage: (page: AppModuleId) => Promise<void>
+  setRegion: (region: MarketRegion) => Promise<void>
   onStateChanged: (callback: (state: MarketState) => void) => () => void
   onNavigate: (callback: (module: AppModuleId) => void) => () => void
 }
@@ -141,8 +151,41 @@ export const INDEX_NAMES: Record<string, string> = {
   sz399006: '创业板指'
 }
 
+/** 美股四个固定指数的 symbol，顺序即展示顺序 */
+export const US_INDEX_SYMBOLS: readonly string[] = [
+  'usDJI',
+  'usIXIC',
+  'usNDX',
+  'usINX'
+]
+
+/** 美股指数名称映射 */
+export const US_INDEX_NAMES: Record<string, string> = {
+  usDJI: '道琼斯',
+  usIXIC: '纳斯达克',
+  usNDX: '纳斯达克100',
+  usINX: '标普500'
+}
+
+/** 按市场返回指数 symbol 列表；cn 返回现有 INDEX_SYMBOLS */
+export function indexSymbolsOf(region: MarketRegion): readonly string[] {
+  return region === 'us' ? US_INDEX_SYMBOLS : INDEX_SYMBOLS
+}
+
+/** 按 symbol 返回指数中文名；未知返回 symbol 本身 */
+export function indexNameOf(symbol: string): string {
+  return INDEX_NAMES[symbol] ?? US_INDEX_NAMES[symbol] ?? symbol
+}
+
+/** 校验是否为合法市场区域 */
+export function isMarketRegion(value: unknown): value is MarketRegion {
+  return value === 'cn' || value === 'us'
+}
+
 /** 交易时段内的刷新间隔 */
 export const REFRESH_INTERVAL_MS = 3000
+/** 美股交易时段内刷新间隔 */
+export const US_REFRESH_INTERVAL_MS = 5000
 /** 连续失败后的退避间隔 */
 export const BACKOFF_INTERVAL_MS = 30000
 /** 连续失败达到该值即退避 */
@@ -213,14 +256,34 @@ export function symbolFromCode(code: string, market: MarketId): string {
   return `${market}${code}`
 }
 
-/** 去掉 symbol 的 sh / sz 前缀，得到 6 位代码 */
-export function codeFromSymbol(symbol: string): string {
-  return symbol.replace(/^(sh|sz)/i, '')
+/**
+ * 规范化美股 ticker：trim + 转大写，仅允许 A-Z、数字、'.'、'-'，
+ * 长度 1–10，且首字符必须是字母。非法返回 null。
+ */
+export function normalizeUsSymbol(
+  input: string
+): { code: string; symbol: string; market: MarketId } | null {
+  const code = input.trim().toUpperCase()
+  if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(code)) {
+    return null
+  }
+  return { code, symbol: symbolFromCode(code, 'us'), market: 'us' }
 }
 
-/** 由 symbol 前缀推导市场 */
+/** 去掉 symbol 的 sh / sz / us 前缀，得到纯代码 */
+export function codeFromSymbol(symbol: string): string {
+  return symbol.replace(/^(sh|sz|us)/i, '')
+}
+
+/** 由 symbol 前缀推导市场：sz → 深市、us → 美股、其余 → 沪市 */
 export function marketFromSymbol(symbol: string): MarketId {
-  return symbol.startsWith('sz') ? 'sz' : 'sh'
+  if (symbol.startsWith('sz')) {
+    return 'sz'
+  }
+  if (symbol.startsWith('us')) {
+    return 'us'
+  }
+  return 'sh'
 }
 
 /** 周一至周五视为交易日（本地时间） */
@@ -329,6 +392,176 @@ export function isSameTradingSession(a: number, b: number): boolean {
     return false
   }
   return startA === tradingSessionStart(b)
+}
+
+/** 美东本地时间片段；weekday 采用 0=周日 … 6=周六 */
+export interface EtParts {
+  year: number
+  /** 1-12 */
+  month: number
+  day: number
+  /** 0-23 */
+  hour: number
+  minute: number
+  weekday: number
+}
+
+/**
+ * 美东时间格式化器。hourCycle 固定为 'h23'，
+ * 避免午夜被格式化为 24 点而误判日期。
+ */
+const ET_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  weekday: 'short',
+  hourCycle: 'h23'
+})
+
+/** 英文星期缩写到 0–6 的映射（0 = 周日） */
+const ET_WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6
+}
+
+/** 美股开盘时刻（美东当日分钟数） 09:30 */
+const US_OPEN_MINUTE = 9 * 60 + 30
+/** 美股收盘时刻（美东当日分钟数） 16:00 */
+const US_CLOSE_MINUTE = 16 * 60
+
+/** 下一次美股开盘信息 */
+export interface UsOpenStart {
+  /** 绝对时间戳（毫秒） */
+  at: number
+  /** 同一天：'09:30 开盘'；跨天：'10-26 09:30 开盘' */
+  label: string
+}
+
+/** 数字补零到两位 */
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+/**
+ * 用 Intl.DateTimeFormat + 'America/New_York' 求美东本地时间。
+ * hourCycle 取 'h23'，并对个别引擎返回的 24 点做取模兜底。
+ */
+export function etParts(date: Date): EtParts {
+  const parts = ET_FORMATTER.formatToParts(date)
+  const read = (type: string): string => {
+    const hit = parts.find((part) => part.type === type)
+    return hit === undefined ? '' : hit.value
+  }
+  return {
+    year: Number(read('year')),
+    month: Number(read('month')),
+    day: Number(read('day')),
+    hour: Number(read('hour')) % 24,
+    minute: Number(read('minute')),
+    weekday: ET_WEEKDAY_INDEX[read('weekday')] ?? 0
+  }
+}
+
+/** 当前是否为美股开盘时段：美东周一至周五 09:30–16:00（左闭右开） */
+export function usMarketOpen(date: Date): boolean {
+  const parts = etParts(date)
+  if (parts.weekday === 0 || parts.weekday === 6) {
+    return false
+  }
+  const minutes = parts.hour * 60 + parts.minute
+  return minutes >= US_OPEN_MINUTE && minutes < US_CLOSE_MINUTE
+}
+
+/** 休市原因：'周末休市' / '开盘前' / '已收盘'；开盘时返回 '' */
+export function usClosedReason(date: Date): string {
+  const parts = etParts(date)
+  if (parts.weekday === 0 || parts.weekday === 6) {
+    return '周末休市'
+  }
+  const minutes = parts.hour * 60 + parts.minute
+  if (minutes < US_OPEN_MINUTE) {
+    return '开盘前'
+  }
+  if (minutes >= US_CLOSE_MINUTE) {
+    return '已收盘'
+  }
+  return ''
+}
+
+/**
+ * 美东墙上时间 → 绝对时间戳（毫秒）。
+ * 先按 Date.UTC 猜测，再用 etParts 求偏差修正，迭代两次即可收敛；
+ * 不硬编码 UTC-5 / UTC-4，自动适配夏令时。
+ */
+function etTimestampOf(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number
+): number {
+  const target = Date.UTC(year, month - 1, day, hour, minute, 0, 0)
+  let guess = target
+  for (let i = 0; i < 2; i += 1) {
+    const parts = etParts(new Date(guess))
+    const wall = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      0,
+      0
+    )
+    guess += target - wall
+  }
+  return guess
+}
+
+/**
+ * 严格晚于 date 的下一次美股开盘（跳过周末），最多向后找 8 天。
+ * 不硬编码 UTC-5 / UTC-4，由 etTimestampOf 自动适配夏令时。
+ */
+export function nextUsOpenStart(date: Date): UsOpenStart {
+  const nowMs = date.getTime()
+  const nowParts = etParts(date)
+  for (let offset = 0; offset < 8; offset += 1) {
+    const at = etTimestampOf(
+      nowParts.year,
+      nowParts.month,
+      nowParts.day + offset,
+      9,
+      30
+    )
+    const startParts = etParts(new Date(at))
+    if (startParts.weekday === 0 || startParts.weekday === 6) {
+      continue
+    }
+    if (at <= nowMs) {
+      continue
+    }
+    const clock = `${pad2(startParts.hour)}:${pad2(startParts.minute)}`
+    const sameDay =
+      startParts.year === nowParts.year &&
+      startParts.month === nowParts.month &&
+      startParts.day === nowParts.day
+    if (sameDay) {
+      return { at, label: `${clock} 开盘` }
+    }
+    const dateLabel = formatDateLabel(
+      new Date(startParts.year, startParts.month - 1, startParts.day)
+    )
+    return { at, label: `${dateLabel} ${clock} 开盘` }
+  }
+  throw new Error('美股开盘时间计算失败：8 天内未找到')
 }
 
 /** 涨跌方向：负 -1、零或空 0、正 1 */

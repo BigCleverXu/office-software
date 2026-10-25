@@ -97,6 +97,7 @@ function createHarness(
   const settings: MarketSettings = {
     paused: false,
     lastPage: 'market',
+    region: 'cn',
     ...options.settings
   }
   let fetchImpl = options.fetchImpl ?? defaultFetch

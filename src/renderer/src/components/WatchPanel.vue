@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
 import { LineChart, Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
-import type { MarketSnapshot, Quote, WatchItem } from '@shared/market'
+import type {
+  MarketRegion,
+  MarketSnapshot,
+  Quote,
+  WatchItem
+} from '@shared/market'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -19,6 +24,7 @@ import {
 } from '@/lib/market-format'
 
 const props = defineProps<{
+  region: MarketRegion
   quotes: Quote[]
   watchlist: WatchItem[]
   snapshot: MarketSnapshot
@@ -80,6 +86,35 @@ const statusText = computed(() => statusLabel(props.snapshot))
 
 const statusTone = computed(() => statusToneClass(props.snapshot))
 
+/** 各市场差异化的标题与文案 */
+const copy = computed(() =>
+  props.region === 'us'
+    ? {
+        title: '美股自选',
+        add: '添加美股',
+        empty: '还没有美股自选，添加后即可随时查看行情'
+      }
+    : {
+        title: '自选股',
+        add: '添加自选股',
+        empty: '还没有自选股，添加后即可随时查看行情'
+      }
+)
+
+/** 休市时在表格上方提示休市与下次开启时间 */
+const showClosedHint = computed(() => props.snapshot.status === 'closed')
+
+/** 当前选中时段是否有缓存数据（有则展示缓存，无则提示暂无数据） */
+const hasCachedData = computed(() => props.snapshot.updatedAtLabel !== null)
+
+const closedHintText = computed(() =>
+  hasCachedData.value
+    ? statusText.value
+    : `该时段暂无数据 · ${statusText.value}`
+)
+
+const deleteLabel = computed(() => `删除${copy.value.title}`)
+
 const highlighted = ref<string | null>(null)
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -107,7 +142,7 @@ defineExpose({ highlight })
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between">
-      <h2 class="text-sm font-semibold">自选股</h2>
+      <h2 class="text-sm font-semibold">{{ copy.title }}</h2>
       <div class="flex items-center gap-2">
         <span class="text-xs" :class="statusTone">{{ statusText }}</span>
         <Button
@@ -121,9 +156,16 @@ defineExpose({ highlight })
         </Button>
         <Button size="sm" @click="emit('add')">
           <Plus />
-          添加自选股
+          {{ copy.add }}
         </Button>
       </div>
+    </div>
+
+    <div
+      v-if="showClosedHint"
+      class="bg-muted text-muted-foreground rounded-lg px-3 py-2 text-xs"
+    >
+      {{ closedHintText }}
     </div>
 
     <div
@@ -131,10 +173,10 @@ defineExpose({ highlight })
       class="text-muted-foreground flex flex-col items-center justify-center gap-3 py-16"
     >
       <LineChart class="size-10 opacity-40" />
-      <p class="text-sm">还没有自选股，添加后即可随时查看行情</p>
+      <p class="text-sm">{{ copy.empty }}</p>
       <Button @click="emit('add')">
         <Plus />
-        添加自选股
+        {{ copy.add }}
       </Button>
     </div>
 
@@ -187,7 +229,7 @@ defineExpose({ highlight })
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label="删除自选股"
+                    :aria-label="deleteLabel"
                     class="text-destructive hover:text-destructive"
                     @click="emit('remove', row.item.symbol)"
                   >

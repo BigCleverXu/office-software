@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import {
   codeFromSymbol,
+  isMarketRegion,
   normalizeCode,
   type MarketId,
   type MarketSettings,
@@ -90,6 +91,18 @@ export class MarketStore {
     return rows.map((row) => rowToWatchItem(row))
   }
 
+  /** 按市场筛选自选股，排序与 getWatchlist 一致，返回副本 */
+  getWatchlistByMarket(market: MarketId): WatchItem[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM watchlist
+         WHERE market = ?
+         ORDER BY sort_order ASC, added_at ASC`
+      )
+      .all(market) as unknown as WatchlistRow[]
+    return rows.map((row) => rowToWatchItem(row))
+  }
+
   /**
    * 新增自选股；同 symbol 已存在时直接返回已存在的条目（不重复写入）。
    * addedAt 由本方法写入，sortOrder 取当前最大值 + 1（空表为 0）。
@@ -167,16 +180,18 @@ export class MarketStore {
     const rows = this.db
       .prepare(
         `SELECT key, value FROM settings
-         WHERE key IN ('paused', 'lastPage')`
+         WHERE key IN ('paused', 'lastPage', 'region')`
       )
       .all() as unknown as SettingRow[]
     const values = new Map(rows.map((row) => [row.key, row.value]))
     const paused = readSettingValue(values, 'paused')
     const lastPage = readSettingValue(values, 'lastPage')
+    const region = readSettingValue(values, 'region')
     return {
       paused:
         typeof paused === 'boolean' ? paused : DEFAULT_MARKET_SETTINGS.paused,
-      lastPage: isAppModuleId(lastPage) ? lastPage : DEFAULT_MODULE
+      lastPage: isAppModuleId(lastPage) ? lastPage : DEFAULT_MODULE,
+      region: isMarketRegion(region) ? region : DEFAULT_MARKET_SETTINGS.region
     }
   }
 
@@ -188,6 +203,7 @@ export class MarketStore {
     )
     statement.run('paused', JSON.stringify(next.paused))
     statement.run('lastPage', JSON.stringify(next.lastPage))
+    statement.run('region', JSON.stringify(next.region))
     return next
   }
 

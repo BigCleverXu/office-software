@@ -9,7 +9,9 @@ import type { AlarmStore } from './alarm-store'
 import type { AlarmScheduler } from './scheduler'
 import {
   MARKET_CHANNELS,
+  isMarketRegion,
   normalizeCode,
+  normalizeUsSymbol,
   type AddWatchResult,
   type MarketState
 } from '../shared/market'
@@ -26,6 +28,7 @@ import {
 import { AssetDownloader, resolveDownloadedFile } from './update-downloader'
 import type { MarketStore } from './market-store'
 import type { MarketScheduler } from './market-scheduler'
+import type { UsMarketScheduler } from './us-market-scheduler'
 import type { NoteStore } from './note-store'
 import { NOTE_CHANNELS } from '../shared/notes'
 import type { NoteDraft } from '../shared/notes'
@@ -34,6 +37,7 @@ import type { Countdown, CountdownDraft, HolidayYear } from '../shared/calendar'
 import type { CountdownStore } from './countdown-store'
 import type { HolidayService } from './holiday-service'
 import { fetchQuotes } from './quote-provider'
+import { fetchUsQuotes } from './us-quote-provider'
 import { fetchLatestRelease, type ReleaseFetchResult } from './release-provider'
 import { checkForUpdate } from './update-checker'
 import {
@@ -213,6 +217,7 @@ export function registerCalendarIpc(deps: CalendarIpcDeps): void {
 export interface MarketIpcDeps {
   store: MarketStore
   scheduler: MarketScheduler
+  usScheduler: UsMarketScheduler
   getWindow: () => BrowserWindow | null
 }
 
@@ -222,10 +227,11 @@ export interface MarketIpcDeps {
  * 调度器通过 getWatchlist / getSettings 回调读取最新数据，因此无需额外重新调度。
  */
 export function registerMarketIpc(deps: MarketIpcDeps): void {
-  const { store, scheduler, getWindow } = deps
+  const { store, scheduler, usScheduler, getWindow } = deps
 
   const buildState = (): MarketState => ({
     snapshot: scheduler.getSnapshot(),
+    us: usScheduler.getSnapshot(),
     watchlist: store.getWatchlist(),
     settings: store.getSettings()
   })
@@ -242,7 +248,11 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
       _event: Electron.IpcMainInvokeEvent,
       code: string
     ): Promise<AddWatchResult> => {
-      const normalized = normalizeCode(code)
+      // 6 位纯数字按 A 股处理，其余按美股 ticker 处理
+      const isCnCode = /^\d{6}$/.test(code.trim())
+      const normalized = isCnCode
+        ? normalizeCode(code)
+        : normalizeUsSymbol(code)
       if (!normalized) {
         return { ok: false, reason: 'invalid-code' }
       }
@@ -251,9 +261,11 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
         return { ok: false, reason: 'duplicate' }
       }
       // 用行情请求校验代码是否真实存在；超时 / 网络异常视为不可用
-      const quotes = await fetchQuotes([symbol], { timeoutMs: 5000 }).catch(
-        () => null
-      )
+      const quotes = await (
+        isCnCode
+          ? fetchQuotes([symbol], { timeoutMs: 5000 })
+          : fetchUsQuotes([symbol], { timeoutMs: 5000 })
+      ).catch(() => null)
       if (!quotes) {
         return { ok: false, reason: 'unavailable' }
       }
@@ -268,7 +280,11 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
         name: quote.name
       })
       // 不 await，避免阻塞添加弹窗关闭
-      void scheduler.refreshNow()
+      if (isCnCode) {
+        void scheduler.refreshNow()
+      } else {
+        void usScheduler.refreshNow()
+      }
       broadcast()
       return { ok: true, item }
     }
@@ -284,7 +300,7 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
   )
 
   ipcMain.handle(MARKET_CHANNELS.refreshNow, async () => {
-    await scheduler.refreshNow()
+    await Promise.all([scheduler.refreshNow(), usScheduler.refreshNow()])
   })
 
   ipcMain.handle(
@@ -292,6 +308,7 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
     (_event: Electron.IpcMainInvokeEvent, paused: boolean) => {
       store.setPaused(paused)
       scheduler.reevaluate()
+      usScheduler.reevaluate()
       broadcast()
     }
   )
@@ -300,6 +317,20 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
     MARKET_CHANNELS.setLastPage,
     (_event: Electron.IpcMainInvokeEvent, page: AppModuleId) => {
       store.setLastPage(page)
+      broadcast()
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.setRegion,
+    (_event: Electron.IpcMainInvokeEvent, region: unknown) => {
+      if (!isMarketRegion(region)) {
+        return
+      }
+      store.updateSettings({ region })
+      if (region === 'us') {
+        usScheduler.reevaluate()
+      }
       broadcast()
     }
   )

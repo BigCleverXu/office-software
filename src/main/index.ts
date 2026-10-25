@@ -20,6 +20,7 @@ import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
+import { UsMarketScheduler } from './us-market-scheduler'
 import { NoteStore } from './note-store'
 import { CountdownStore } from './countdown-store'
 import { HolidayService } from './holiday-service'
@@ -34,6 +35,7 @@ import {
   registerUpdateIpc
 } from './ipc'
 import { fetchQuotes } from './quote-provider'
+import { fetchUsQuotes } from './us-quote-provider'
 import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
@@ -50,6 +52,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let scheduler: AlarmScheduler | null = null
 let marketSchedulerRef: MarketScheduler | null = null
+let usMarketSchedulerRef: UsMarketScheduler | null = null
 let trayTooltipTimer: ReturnType<typeof setInterval> | null = null
 /** 缓存最后一次有效的上证指数，供非交易时段复用 */
 let lastShanghai: Quote | null = null
@@ -255,10 +258,34 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
+  const marketScheduler = new MarketScheduler({
+    fetchQuotes: (symbols) => fetchQuotes(symbols),
+    getWatchlist: () =>
+      marketStore.getWatchlist().filter((item) => item.market !== 'us'),
+    getSettings: () => marketStore.getSettings(),
+    onSnapshot: () => {
+      pushMarketState()
+      refreshTrayTooltip()
+    }
+  })
+  marketSchedulerRef = marketScheduler
+
+  const usMarketScheduler = new UsMarketScheduler({
+    fetchQuotes: (symbols) => fetchUsQuotes(symbols),
+    getWatchlist: () =>
+      marketStore.getWatchlist().filter((item) => item.market === 'us'),
+    getSettings: () => marketStore.getSettings(),
+    onSnapshot: () => {
+      pushMarketState()
+    }
+  })
+  usMarketSchedulerRef = usMarketScheduler
+
   /** 把最新行情状态推给渲染层（读取的是 store / 调度器的最新值） */
   const pushMarketState = (): void => {
     mainWindow?.webContents.send(MARKET_CHANNELS.stateChanged, {
       snapshot: marketScheduler.getSnapshot(),
+      us: usMarketScheduler.getSnapshot(),
       watchlist: marketStore.getWatchlist(),
       settings: marketStore.getSettings()
     })
@@ -284,20 +311,10 @@ app.whenReady().then(() => {
     tray?.setToolTip(text)
   }
 
-  const marketScheduler = new MarketScheduler({
-    fetchQuotes: (symbols) => fetchQuotes(symbols),
-    getWatchlist: () => marketStore.getWatchlist(),
-    getSettings: () => marketStore.getSettings(),
-    onSnapshot: () => {
-      pushMarketState()
-      refreshTrayTooltip()
-    }
-  })
-  marketSchedulerRef = marketScheduler
-
   registerMarketIpc({
     store: marketStore,
     scheduler: marketScheduler,
+    usScheduler: usMarketScheduler,
     getWindow: () => mainWindow
   })
 
@@ -338,6 +355,7 @@ app.whenReady().then(() => {
 
   alarmScheduler.start()
   marketScheduler.start()
+  usMarketScheduler.start()
   refreshTrayTooltip()
   trayTooltipTimer = setInterval(refreshTrayTooltip, 10000)
 
@@ -350,6 +368,7 @@ app.on('before-quit', () => {
   isQuitting = true
   scheduler?.stop()
   marketSchedulerRef?.stop()
+  usMarketSchedulerRef?.stop()
   updateChecker?.stop()
   updateChecker = null
   if (trayTooltipTimer !== null) {
