@@ -5,6 +5,7 @@ import type { NoteApi } from '../shared/notes'
 import type { UpdateApi } from '../shared/update'
 import type { SettingsApi } from '../shared/settings'
 import type { CalendarApi } from '../shared/calendar'
+import type { NewsApi } from '../shared/news'
 
 declare global {
   interface Window {
@@ -16,6 +17,7 @@ declare global {
       notes: NoteApi
       calendar: CalendarApi
       settings: SettingsApi
+      news: NewsApi
     }
   }
 }

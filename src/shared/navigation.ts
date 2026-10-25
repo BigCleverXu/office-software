@@ -1,13 +1,14 @@
 // 应用模块导航共享契约：主进程 / preload / 渲染层共用
 
 /** 应用模块标识 */
-export type AppModuleId = 'alarms' | 'calendar' | 'market' | 'notes'
+export type AppModuleId = 'alarms' | 'calendar' | 'market' | 'news' | 'notes'
 
 /** 全部合法模块标识，顺序即侧边栏展示顺序 */
 export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'alarms',
   'calendar',
   'market',
+  'news',
   'notes'
 ]
 

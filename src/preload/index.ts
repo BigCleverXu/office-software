@@ -37,6 +37,12 @@ import {
   type HolidayYear
 } from '../shared/calendar'
 import {
+  NEWS_CHANNELS,
+  type NewsApi,
+  type NewsPlatformId,
+  type NewsState
+} from '../shared/news'
+import {
   SETTINGS_CHANNELS,
   type AppSettings,
   type AppTheme,
@@ -213,6 +219,25 @@ const calendar: CalendarApi = {
   }
 }
 
+// 暴露给渲染进程的热点新闻 API
+const news: NewsApi = {
+  get: (): Promise<NewsState> => ipcRenderer.invoke(NEWS_CHANNELS.get),
+  setPlatforms: (platforms: NewsPlatformId[]): Promise<NewsState> =>
+    ipcRenderer.invoke(NEWS_CHANNELS.setPlatforms, platforms),
+  onChanged: (callback: (state: NewsState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: NewsState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(NEWS_CHANNELS.changed, listener)
+    return () => {
+      ipcRenderer.removeListener(NEWS_CHANNELS.changed, listener)
+    }
+  }
+}
+
 /** 从启动参数解析首帧主题，仅接受三个合法值，否则回退 'system' */
 function readInitialTheme(): AppTheme {
   const prefix = '--app-theme='
@@ -249,7 +274,7 @@ const settings: SettingsApi = {
   }
 }
 
-const api = { alarms, market, update, notes, calendar, settings }
+const api = { alarms, market, update, notes, calendar, settings, news }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

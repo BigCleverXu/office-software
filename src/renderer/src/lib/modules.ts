@@ -5,12 +5,14 @@ import {
   AlarmClock,
   CalendarDays,
   LineChart,
+  Newspaper,
   StickyNote
 } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
 import CalendarPanel from '@/components/CalendarPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
+import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
@@ -49,6 +51,13 @@ export const MODULES: ModuleMeta[] = [
     description: '大盘指数与自选股行情，交易时段自动刷新',
     icon: LineChart,
     component: MarketPanel
+  },
+  {
+    id: 'news',
+    label: '热点',
+    description: '实时热点新闻，按平台聚合展示',
+    icon: Newspaper,
+    component: NewsPanel
   },
   {
     id: 'notes',

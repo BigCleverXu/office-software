@@ -22,6 +22,7 @@ import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { NoteStore } from './note-store'
+import { NewsStore } from './news-store'
 import { CountdownStore } from './countdown-store'
 import { HolidayService } from './holiday-service'
 import { CALENDAR_CHANNELS } from '../shared/calendar'
@@ -30,6 +31,7 @@ import {
   registerAlarmIpc,
   registerCalendarIpc,
   registerMarketIpc,
+  registerNewsIpc,
   registerNotesIpc,
   registerSettingsIpc,
   registerUpdateIpc
@@ -243,6 +245,9 @@ app.whenReady().then(() => {
 
   const noteStore = new NoteStore(db)
   registerNotesIpc({ store: noteStore, getWindow: () => mainWindow })
+
+  const newsStore = new NewsStore(db)
+  registerNewsIpc({ store: newsStore, getWindow: () => mainWindow })
 
   const countdownStore = new CountdownStore(db)
   // 后台刷新成功后主动推送，渲染层无需轮询
