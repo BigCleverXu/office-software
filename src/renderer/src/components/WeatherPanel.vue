@@ -199,7 +199,7 @@ const hourlySeries = computed<CurveSeries[]>(() => {
       key: 'temperature',
       label: '温度',
       values: hourly.value.map((point) => point.temperature),
-      color: 'var(--color-foreground)',
+      color: 'var(--color-weather-sun)',
       area: true,
       showValues: true
     }
@@ -217,14 +217,14 @@ const dailySeries = computed<CurveSeries[]>(() => {
       key: 'max',
       label: '最高温',
       values: daily.value.map((day) => day.temperatureMax),
-      color: 'var(--color-foreground)',
+      color: 'var(--color-weather-sun)',
       showValues: true
     },
     {
       key: 'min',
       label: '最低温',
       values: daily.value.map((day) => day.temperatureMin),
-      color: 'var(--color-muted-foreground)',
+      color: 'var(--color-weather-rain)',
       showValues: true
     }
   ]
@@ -429,6 +429,7 @@ onUnmounted(() => {
               <component
                 :is="currentVisual.icon"
                 class="size-10 shrink-0"
+                :class="currentVisual.tone"
                 aria-hidden="true"
               />
               <div class="min-w-0">
@@ -673,6 +674,7 @@ onUnmounted(() => {
                       <component
                         :is="day.visual.icon"
                         class="size-4 shrink-0"
+                        :class="day.visual.tone"
                         aria-hidden="true"
                       />
                       <span class="truncate text-sm">

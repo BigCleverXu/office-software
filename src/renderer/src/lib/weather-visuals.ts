@@ -21,18 +21,24 @@ export interface WeatherVisual {
   label: string
   /** lucide-vue-next 图标组件 */
   icon: Component
-  /** 卡片背景渐变工具类，如 'from-foreground/10 via-foreground/5 to-transparent' */
+  /** 图标与图例的 Tailwind 文本颜色类 */
+  tone: string
+  /** 卡片背景渐变工具类，如 'from-weather-sun/25 …' */
   gradient: string
 }
 
-/** 渐变仅在灰阶内做微弱区分，不引入彩色调色板 */
+/** 卡片渐变使用天气色彩令牌，按现象类型着色 */
 const GRADIENTS = {
-  clear: 'from-foreground/10 via-foreground/5 to-transparent',
-  partly: 'from-foreground/5 via-foreground/10 to-transparent',
-  rain: 'from-foreground/15 via-foreground/5 to-transparent',
-  snow: 'from-foreground/5 via-foreground/15 to-transparent',
-  storm: 'from-foreground/20 via-foreground/10 to-transparent',
-  unknown: 'from-foreground/5 via-foreground/5 to-transparent'
+  clear: 'from-weather-sun/25 via-weather-rain/10 to-transparent',
+  clearNight: 'from-weather-moon/25 via-weather-dusk/10 to-transparent',
+  partly: 'from-weather-sun/20 via-weather-cloud/20 to-transparent',
+  partlyNight: 'from-weather-moon/20 via-weather-cloud/15 to-transparent',
+  overcast: 'from-weather-fog/25 via-weather-cloud/20 to-transparent',
+  fog: 'from-weather-fog/30 via-weather-cloud/20 to-transparent',
+  rain: 'from-weather-rain/25 via-weather-snow/10 to-transparent',
+  snow: 'from-weather-snow/30 via-weather-rain/10 to-transparent',
+  storm: 'from-weather-dusk/25 via-weather-bolt/15 to-transparent',
+  unknown: 'from-weather-fog/15 via-weather-cloud/10 to-transparent'
 }
 
 /** 八方位中文名，索引与 45° 扇区一一对应 */
@@ -44,7 +50,7 @@ const PLACEHOLDER = '--'
 /** 逐天预报时间格式的兜底值 */
 const CLOCK_PLACEHOLDER = '--:--'
 
-/** 天气码 → 图标 / 中文文案 / 渐变 */
+/** 天气码 → 图标 / 中文文案 / 色调 / 渐变 */
 export function weatherVisual(code: number, isDay?: boolean): WeatherVisual {
   const day = isDay !== false
 
@@ -52,33 +58,47 @@ export function weatherVisual(code: number, isDay?: boolean): WeatherVisual {
     return {
       label: '晴',
       icon: day ? Sun : Moon,
-      gradient: GRADIENTS.clear
+      tone: day ? 'text-weather-sun' : 'text-weather-moon',
+      gradient: day ? GRADIENTS.clear : GRADIENTS.clearNight
     }
   }
   if (code === 1) {
     return {
       label: '少云',
       icon: day ? CloudSun : CloudMoon,
-      gradient: GRADIENTS.partly
+      tone: day ? 'text-weather-sun' : 'text-weather-moon',
+      gradient: day ? GRADIENTS.partly : GRADIENTS.partlyNight
     }
   }
   if (code === 2) {
     return {
       label: '多云',
       icon: day ? CloudSun : CloudMoon,
-      gradient: GRADIENTS.partly
+      tone: day ? 'text-weather-sun' : 'text-weather-moon',
+      gradient: day ? GRADIENTS.partly : GRADIENTS.partlyNight
     }
   }
   if (code === 3) {
-    return { label: '阴', icon: Cloudy, gradient: GRADIENTS.partly }
+    return {
+      label: '阴',
+      icon: Cloudy,
+      tone: 'text-weather-fog',
+      gradient: GRADIENTS.overcast
+    }
   }
   if (code === 45 || code === 48) {
-    return { label: '雾', icon: CloudFog, gradient: GRADIENTS.unknown }
+    return {
+      label: '雾',
+      icon: CloudFog,
+      tone: 'text-weather-fog',
+      gradient: GRADIENTS.fog
+    }
   }
   if (code === 51 || code === 53 || code === 55) {
     return {
       label: '毛毛雨',
       icon: CloudDrizzle,
+      tone: 'text-weather-rain',
       gradient: GRADIENTS.rain
     }
   }
@@ -86,37 +106,79 @@ export function weatherVisual(code: number, isDay?: boolean): WeatherVisual {
     return {
       label: '冻毛毛雨',
       icon: CloudDrizzle,
+      tone: 'text-weather-rain',
       gradient: GRADIENTS.rain
     }
   }
   if (code === 61) {
-    return { label: '小雨', icon: CloudRain, gradient: GRADIENTS.rain }
+    return {
+      label: '小雨',
+      icon: CloudRain,
+      tone: 'text-weather-rain',
+      gradient: GRADIENTS.rain
+    }
   }
   if (code === 63) {
-    return { label: '中雨', icon: CloudRain, gradient: GRADIENTS.rain }
+    return {
+      label: '中雨',
+      icon: CloudRain,
+      tone: 'text-weather-rain',
+      gradient: GRADIENTS.rain
+    }
   }
   if (code === 65) {
-    return { label: '大雨', icon: CloudRain, gradient: GRADIENTS.rain }
+    return {
+      label: '大雨',
+      icon: CloudRain,
+      tone: 'text-weather-rain',
+      gradient: GRADIENTS.rain
+    }
   }
   if (code === 66 || code === 67) {
-    return { label: '冻雨', icon: CloudRain, gradient: GRADIENTS.rain }
+    return {
+      label: '冻雨',
+      icon: CloudRain,
+      tone: 'text-weather-rain',
+      gradient: GRADIENTS.rain
+    }
   }
   if (code === 80 || code === 81 || code === 82) {
-    return { label: '阵雨', icon: CloudRain, gradient: GRADIENTS.rain }
+    return {
+      label: '阵雨',
+      icon: CloudRain,
+      tone: 'text-weather-rain',
+      gradient: GRADIENTS.rain
+    }
   }
   if (code === 71 || code === 73 || code === 75) {
-    return { label: '雪', icon: CloudSnow, gradient: GRADIENTS.snow }
+    return {
+      label: '雪',
+      icon: CloudSnow,
+      tone: 'text-weather-snow',
+      gradient: GRADIENTS.snow
+    }
   }
   if (code === 77) {
-    return { label: '米雪', icon: CloudSnow, gradient: GRADIENTS.snow }
+    return {
+      label: '米雪',
+      icon: CloudSnow,
+      tone: 'text-weather-snow',
+      gradient: GRADIENTS.snow
+    }
   }
   if (code === 85 || code === 86) {
-    return { label: '阵雪', icon: CloudSnow, gradient: GRADIENTS.snow }
+    return {
+      label: '阵雪',
+      icon: CloudSnow,
+      tone: 'text-weather-snow',
+      gradient: GRADIENTS.snow
+    }
   }
   if (code === 95) {
     return {
       label: '雷阵雨',
       icon: CloudLightning,
+      tone: 'text-weather-dusk',
       gradient: GRADIENTS.storm
     }
   }
@@ -124,10 +186,16 @@ export function weatherVisual(code: number, isDay?: boolean): WeatherVisual {
     return {
       label: '雷暴冰雹',
       icon: CloudLightning,
+      tone: 'text-weather-dusk',
       gradient: GRADIENTS.storm
     }
   }
-  return { label: '未知', icon: Cloud, gradient: GRADIENTS.unknown }
+  return {
+    label: '未知',
+    icon: Cloud,
+    tone: 'text-weather-fog',
+    gradient: GRADIENTS.unknown
+  }
 }
 
 /** 风向角度 → 八方位中文名，非法数字返回占位 */

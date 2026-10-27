@@ -1,6 +1,6 @@
 {
   "name": "reminder-app",
-  "version": "2.5.4",
+  "version": "2.6.0",
   "description": "An Electron application with Vue and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",

@@ -33,6 +33,16 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
+  --color-weather-sun: var(--weather-sun);
+  --color-weather-moon: var(--weather-moon);
+  --color-weather-star: var(--weather-star);
+  --color-weather-cloud: var(--weather-cloud);
+  --color-weather-fog: var(--weather-fog);
+  --color-weather-rain: var(--weather-rain);
+  --color-weather-snow: var(--weather-snow);
+  --color-weather-bolt: var(--weather-bolt);
+  --color-weather-dusk: var(--weather-dusk);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -77,6 +87,16 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* 天气语义色：白色卡片上作为图标颜色仍可辨认 */
+  --weather-sun: oklch(0.67 0.148 70);
+  --weather-moon: oklch(0.64 0.09 250);
+  --weather-star: oklch(0.665 0.07 85);
+  --weather-cloud: oklch(0.63 0.045 250);
+  --weather-fog: oklch(0.6 0.035 250);
+  --weather-rain: oklch(0.57 0.13 245);
+  --weather-snow: oklch(0.62 0.07 230);
+  --weather-bolt: oklch(0.655 0.16 95);
+  --weather-dusk: oklch(0.52 0.13 300);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -116,6 +136,16 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* 天气语义色：深色卡片上整体提亮，避免过暗 */
+  --weather-sun: oklch(0.82 0.15 75);
+  --weather-moon: oklch(0.82 0.07 250);
+  --weather-star: oklch(0.93 0.06 85);
+  --weather-cloud: oklch(0.9 0.02 250);
+  --weather-fog: oklch(0.82 0.03 250);
+  --weather-rain: oklch(0.78 0.11 245);
+  --weather-snow: oklch(0.87 0.07 230);
+  --weather-bolt: oklch(0.89 0.15 100);
+  --weather-dusk: oklch(0.72 0.12 300);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

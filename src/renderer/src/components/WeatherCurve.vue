@@ -141,6 +141,9 @@ function gradientId(key: string): string {
   return `weather-curve-${instanceId}-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`
 }
 
+/** 降水柱渐变 id，同样做实例隔离 */
+const barGradientId = `weather-curve-${instanceId}-precip`
+
 /** 序列视图：点位、路径与渐变引用 */
 const seriesViews = computed(() =>
   props.series.map((item) => {
@@ -242,6 +245,19 @@ const tickViews = computed(() => {
           <stop offset="0%" :stop-color="view.color" stop-opacity="0.25" />
           <stop offset="100%" :stop-color="view.color" stop-opacity="0" />
         </linearGradient>
+
+        <linearGradient :id="barGradientId" x1="0" y1="0" x2="0" y2="1">
+          <stop
+            offset="0%"
+            stop-color="var(--color-weather-rain)"
+            stop-opacity="0.55"
+          />
+          <stop
+            offset="100%"
+            stop-color="var(--color-weather-rain)"
+            stop-opacity="0.12"
+          />
+        </linearGradient>
       </defs>
 
       <g>
@@ -253,8 +269,7 @@ const tickViews = computed(() => {
           :width="bar.width"
           :height="bar.height"
           rx="2"
-          fill="currentColor"
-          class="text-foreground/15"
+          :fill="`url(#${barGradientId})`"
         />
       </g>
 

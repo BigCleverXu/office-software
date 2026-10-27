@@ -92,7 +92,7 @@ const scene = computed(() =>
   inset: -6%;
   background: repeating-conic-gradient(
     from 0deg,
-    rgba(251, 191, 36, 0.22) 0deg 7deg,
+    color-mix(in oklab, var(--color-weather-sun) 45%, transparent) 0deg 7deg,
     transparent 7deg 22deg
   );
   filter: blur(3px);
@@ -107,11 +107,12 @@ const scene = computed(() =>
   height: 34px;
   background: radial-gradient(
     circle,
-    rgba(253, 230, 138, 0.95) 0%,
-    rgba(251, 191, 36, 0.78) 58%,
-    rgba(245, 158, 11, 0.08) 100%
+    color-mix(in oklab, var(--color-weather-star) 92%, white) 0%,
+    color-mix(in oklab, var(--color-weather-sun) 78%, transparent) 58%,
+    transparent 100%
   );
-  box-shadow: 0 0 22px rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 22px
+    color-mix(in oklab, var(--color-weather-sun) 35%, transparent);
   transform: translate(-50%, -50%);
   animation: sun-breathe 5s ease-in-out infinite;
 }
@@ -131,11 +132,12 @@ const scene = computed(() =>
   border-radius: 50%;
   background: radial-gradient(
     circle at 38% 34%,
-    color-mix(in oklab, var(--foreground) 32%, transparent),
-    color-mix(in oklab, var(--foreground) 12%, transparent) 62%,
+    color-mix(in oklab, var(--color-weather-moon) 32%, transparent),
+    color-mix(in oklab, var(--color-weather-moon) 12%, transparent) 62%,
     transparent 80%
   );
-  box-shadow: 0 0 26px color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: 0 0 26px
+    color-mix(in oklab, var(--color-weather-moon) 12%, transparent);
   animation: moon-breathe 9s ease-in-out infinite;
 }
 
@@ -144,8 +146,9 @@ const scene = computed(() =>
   position: absolute;
   content: '';
   border-radius: 50%;
-  border: 1.5px solid color-mix(in oklab, var(--foreground) 16%, transparent);
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  border: 1.5px solid
+    color-mix(in oklab, var(--color-weather-moon) 16%, transparent);
+  background: color-mix(in oklab, var(--color-weather-moon) 6%, transparent);
 }
 
 .moon::before {
@@ -173,7 +176,7 @@ const scene = computed(() =>
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: color-mix(in oklab, var(--foreground) 55%, transparent);
+  background: color-mix(in oklab, var(--color-weather-star) 55%, transparent);
   animation: star-twinkle 4.2s ease-in-out infinite;
 }
 
@@ -283,7 +286,10 @@ const scene = computed(() =>
   position: absolute;
   height: 38px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+  /* 白色主体 + 云色冷调，浅色卡片上仍有边界 */
+  background: color-mix(in oklab, white 82%, var(--color-weather-cloud));
+  box-shadow: 0 8px 18px
+    color-mix(in oklab, var(--color-weather-cloud) 22%, transparent);
   filter: blur(6px);
   animation: cloud-drift 30s ease-in-out infinite alternate;
 }
@@ -345,7 +351,7 @@ const scene = computed(() =>
   width: 124%;
   height: 22px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  background: color-mix(in oklab, var(--color-weather-fog) 26%, transparent);
   filter: blur(9px);
   animation: fog-drift 18s ease-in-out infinite alternate;
 }
@@ -382,9 +388,9 @@ const scene = computed(() =>
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    rgba(96, 165, 250, 0) 0%,
-    rgba(96, 165, 250, 0.45) 62%,
-    rgba(96, 165, 250, 0.05) 100%
+    color-mix(in oklab, var(--color-weather-rain) 0%, transparent) 0%,
+    color-mix(in oklab, var(--color-weather-rain) 45%, transparent) 62%,
+    color-mix(in oklab, var(--color-weather-rain) 5%, transparent) 100%
   );
   animation: rain-fall 1.15s linear infinite;
 }
@@ -564,7 +570,7 @@ const scene = computed(() =>
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: color-mix(in oklab, var(--foreground) 35%, white);
+  background: color-mix(in oklab, white 72%, var(--color-weather-snow));
   opacity: 0.5;
   animation:
     snow-fall 10s linear infinite,
@@ -802,8 +808,8 @@ const scene = computed(() =>
   height: 64px;
   background: linear-gradient(
     180deg,
-    rgba(191, 219, 254, 0.9),
-    rgba(147, 197, 253, 0.3)
+    var(--color-weather-bolt),
+    color-mix(in oklab, var(--color-weather-bolt) 35%, transparent)
   );
   clip-path: polygon(
     56% 0,
@@ -814,7 +820,9 @@ const scene = computed(() =>
     48% 52%,
     16% 52%
   );
-  filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.5));
+  filter: drop-shadow(
+    0 0 8px color-mix(in oklab, var(--color-weather-bolt) 55%, transparent)
+  );
   opacity: 0;
   animation: bolt-flash 7.6s ease-out infinite;
 }
