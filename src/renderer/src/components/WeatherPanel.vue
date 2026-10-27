@@ -21,6 +21,7 @@ import { MAX_CITIES } from '@shared/weather'
 import type { WeatherCity } from '@shared/weather'
 import WeatherCurve from '@/components/WeatherCurve.vue'
 import type { CurveSeries } from '@/components/WeatherCurve.vue'
+import WeatherScene from '@/components/WeatherScene.vue'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -404,8 +405,13 @@ onUnmounted(() => {
           class="card-interactive shadow-soft relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br p-5"
           :class="currentVisual.gradient"
         >
+          <WeatherScene
+            :code="snapshot.current.weatherCode"
+            :is-day="snapshot.current.isDay"
+            :precipitation="snapshot.current.precipitation"
+          />
           <div
-            class="transition-opacity duration-200 ease-out"
+            class="relative z-10 transition-opacity duration-200 ease-out"
             :class="switching ? 'opacity-40' : 'opacity-100'"
           >
             <div class="flex items-start justify-between gap-2">
@@ -460,7 +466,7 @@ onUnmounted(() => {
 
           <div
             v-if="switching"
-            class="bg-background/55 absolute inset-0 flex flex-col items-center justify-center gap-2 backdrop-blur-[2px]"
+            class="bg-background/55 absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 backdrop-blur-[2px]"
             role="status"
           >
             <LoaderCircle
