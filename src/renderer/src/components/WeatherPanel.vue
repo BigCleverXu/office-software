@@ -8,6 +8,7 @@ import {
   CloudRain,
   Droplets,
   Gauge,
+  LoaderCircle,
   MapPin,
   RefreshCw,
   Search,
@@ -46,7 +47,10 @@ const {
   removeCity,
   search,
   clearSearch,
-  subscribe
+  subscribe,
+  switchingCityId,
+  switching,
+  activeCityId
 } = useWeather()
 
 /** 自动刷新间隔：10 分钟 */
@@ -163,7 +167,19 @@ const resultRows = computed(() =>
   results.value.map((city) => ({ city, meta: cityMeta(city) }))
 )
 
-const currentCityId = computed(() => currentCity.value?.id ?? '')
+/** 正在切换的目标城市名，用于加载文案 */
+const switchingCityName = computed(() => {
+  const id = switchingCityId.value
+  if (!id) return ''
+  return cities.value.find((entry) => entry.id === id)?.name ?? '该地区'
+})
+
+/** 天气内容的动画标识：城市或更新时间变化时重挂载触发淡入 */
+const contentKey = computed(() =>
+  snapshot.value
+    ? `${snapshot.value.city.id}-${snapshot.value.updatedAt}`
+    : 'empty'
+)
 
 const hourly = computed(() => snapshot.value?.hourly ?? [])
 
@@ -306,14 +322,26 @@ onUnmounted(() => {
   <div class="flex h-full flex-col gap-4 overflow-y-auto p-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-2">
+        <LoaderCircle
+          v-if="switching"
+          class="text-muted-foreground size-4 shrink-0 animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
         <MapPin
+          v-else
           class="text-muted-foreground size-4 shrink-0"
           aria-hidden="true"
         />
         <span class="truncate text-sm font-medium">
           {{ cities.length > 0 ? (currentCity?.name ?? '--') : '未选择地区' }}
         </span>
-        <span v-if="snapshot" class="text-muted-foreground truncate text-xs">
+        <span v-if="switching" class="text-muted-foreground truncate text-xs">
+          正在获取 {{ switchingCityName }} 天气…
+        </span>
+        <span
+          v-else-if="snapshot"
+          class="text-muted-foreground truncate text-xs"
+        >
           {{ updatedLabel }}
         </span>
       </div>
@@ -321,7 +349,7 @@ onUnmounted(() => {
       <Button
         variant="outline"
         size="sm"
-        :disabled="refreshing || cities.length === 0"
+        :disabled="refreshing || switching || cities.length === 0"
         @click="handleRefresh"
       >
         <RefreshCw
@@ -344,7 +372,7 @@ onUnmounted(() => {
       <Button
         variant="outline"
         size="sm"
-        :disabled="refreshing"
+        :disabled="refreshing || switching"
         @click="handleRefresh"
       >
         重试
@@ -372,55 +400,77 @@ onUnmounted(() => {
       <div class="stagger-list flex min-w-0 flex-col gap-4">
         <section
           v-if="snapshot"
-          class="card-interactive shadow-soft overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br p-5"
+          :key="contentKey"
+          class="card-interactive shadow-soft relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br p-5"
           :class="currentVisual.gradient"
         >
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">
-                {{ snapshot.city.name }}
-              </p>
-              <p class="text-muted-foreground truncate text-xs">
-                {{ currentCityMeta }}
-              </p>
+          <div
+            class="transition-opacity duration-200 ease-out"
+            :class="switching ? 'opacity-40' : 'opacity-100'"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">
+                  {{ snapshot.city.name }}
+                </p>
+                <p class="text-muted-foreground truncate text-xs">
+                  {{ currentCityMeta }}
+                </p>
+              </div>
             </div>
+
+            <div class="mt-4 flex items-center gap-3">
+              <component
+                :is="currentVisual.icon"
+                class="size-10 shrink-0"
+                aria-hidden="true"
+              />
+              <div class="min-w-0">
+                <p class="text-5xl leading-none font-semibold tracking-tighter">
+                  {{ currentTemperature }}
+                </p>
+                <p class="text-muted-foreground mt-1 text-xs">
+                  {{ currentVisual.label }} · 体感 {{ apparentTemperature }}
+                </p>
+              </div>
+            </div>
+
+            <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
+              <div
+                v-for="metric in metrics"
+                :key="metric.key"
+                class="flex min-w-0 flex-col gap-0.5"
+              >
+                <dt
+                  class="text-muted-foreground flex items-center gap-1 text-[11px]"
+                >
+                  <component
+                    :is="metric.icon"
+                    class="size-3 shrink-0"
+                    aria-hidden="true"
+                  />
+                  {{ metric.label }}
+                </dt>
+                <dd class="truncate text-sm tabular-nums">
+                  {{ metric.value }}
+                </dd>
+              </div>
+            </dl>
           </div>
 
-          <div class="mt-4 flex items-center gap-3">
-            <component
-              :is="currentVisual.icon"
-              class="size-10 shrink-0"
+          <div
+            v-if="switching"
+            class="bg-background/55 absolute inset-0 flex flex-col items-center justify-center gap-2 backdrop-blur-[2px]"
+            role="status"
+          >
+            <LoaderCircle
+              class="size-6 animate-spin motion-reduce:animate-none"
               aria-hidden="true"
             />
-            <div class="min-w-0">
-              <p class="text-5xl leading-none font-semibold tracking-tighter">
-                {{ currentTemperature }}
-              </p>
-              <p class="text-muted-foreground mt-1 text-xs">
-                {{ currentVisual.label }} · 体感 {{ apparentTemperature }}
-              </p>
-            </div>
+            <p class="text-muted-foreground text-xs">
+              正在获取 {{ switchingCityName }} 天气…
+            </p>
           </div>
-
-          <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
-            <div
-              v-for="metric in metrics"
-              :key="metric.key"
-              class="flex min-w-0 flex-col gap-0.5"
-            >
-              <dt
-                class="text-muted-foreground flex items-center gap-1 text-[11px]"
-              >
-                <component
-                  :is="metric.icon"
-                  class="size-3 shrink-0"
-                  aria-hidden="true"
-                />
-                {{ metric.label }}
-              </dt>
-              <dd class="truncate text-sm tabular-nums">{{ metric.value }}</dd>
-            </div>
-          </dl>
         </section>
 
         <section
@@ -454,10 +504,18 @@ onUnmounted(() => {
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-auto w-full justify-between gap-2 px-2 py-2 font-normal"
+                class="h-auto w-full justify-between gap-2 px-2 py-2 font-normal transition-transform duration-150 active:scale-[0.99]"
+                :disabled="switching"
                 @click="handleAddCity(row.city)"
               >
-                <span class="truncate">{{ row.city.name }}</span>
+                <span class="flex min-w-0 items-center gap-1.5">
+                  <LoaderCircle
+                    v-if="row.city.id === switchingCityId"
+                    class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                  <span class="truncate">{{ row.city.name }}</span>
+                </span>
                 <span
                   v-if="row.meta"
                   class="text-muted-foreground shrink-0 truncate text-xs"
@@ -485,7 +543,7 @@ onUnmounted(() => {
               :key="row.city.id"
               class="group flex items-center gap-1 rounded-lg pr-1"
               :class="
-                row.city.id === currentCityId
+                row.city.id === activeCityId
                   ? 'bg-accent text-accent-foreground'
                   : 'hover:bg-muted/60'
               "
@@ -493,10 +551,16 @@ onUnmounted(() => {
               <Button
                 variant="ghost"
                 size="sm"
-                class="h-auto min-w-0 flex-1 justify-start gap-2 px-2 py-1.5 font-normal"
+                class="h-auto min-w-0 flex-1 justify-start gap-2 px-2 py-1.5 font-normal transition-transform duration-150 active:scale-[0.99]"
                 @click="handleSelectCity(row.city.id)"
               >
+                <LoaderCircle
+                  v-if="row.city.id === switchingCityId"
+                  class="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
                 <MapPin
+                  v-else
                   class="text-muted-foreground size-3.5 shrink-0"
                   aria-hidden="true"
                 />
@@ -529,112 +593,145 @@ onUnmounted(() => {
         </section>
       </div>
 
-      <div class="stagger-list flex min-w-0 flex-col gap-4">
-        <template v-if="snapshot">
-          <section
-            class="bg-card shadow-soft rounded-2xl border border-border/70 p-4"
+      <div class="stagger-list relative flex min-w-0 flex-col gap-4">
+        <div :key="contentKey" class="relative flex flex-col gap-4">
+          <div
+            class="flex flex-col gap-4 transition-opacity duration-200 ease-out"
+            :class="switching ? 'opacity-40' : 'opacity-100'"
           >
-            <div
-              class="mb-2 flex flex-wrap items-baseline justify-between gap-2"
-            >
-              <p class="text-sm font-medium">未来 24 小时</p>
-              <span class="text-muted-foreground text-xs">温度与降水概率</span>
-            </div>
-
-            <WeatherCurve
-              v-if="hourlySeries.length > 0"
-              :labels="hourlyLabels"
-              :series="hourlySeries"
-              :precipitation="hourlyPrecipitation"
-              :height="200"
-            />
-            <div v-else class="empty-state text-muted-foreground py-10">
-              <span class="empty-state-icon">
-                <CloudOff class="size-5" aria-hidden="true" />
-              </span>
-              <p class="text-xs">暂无逐时预报</p>
-            </div>
-          </section>
-
-          <section
-            class="bg-card shadow-soft rounded-2xl border border-border/70 p-4"
-          >
-            <div
-              class="mb-2 flex flex-wrap items-baseline justify-between gap-2"
-            >
-              <p class="text-sm font-medium">7 天预报</p>
-              <span class="text-muted-foreground text-xs">最高 / 最低温</span>
-            </div>
-
-            <WeatherCurve
-              v-if="dailySeries.length > 0"
-              :labels="dailyLabels"
-              :series="dailySeries"
-              :height="180"
-            />
-
-            <ul
-              v-if="dailyRows.length > 0"
-              class="mt-3 flex flex-col divide-y divide-border/60"
-            >
-              <li
-                v-for="day in dailyRows"
-                :key="day.key"
-                class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+            <template v-if="snapshot">
+              <section
+                class="bg-card shadow-soft rounded-2xl border border-border/70 p-4"
               >
-                <span class="w-10 text-sm font-medium">{{ day.weekday }}</span>
-                <span class="text-muted-foreground w-12 text-xs tabular-nums">
-                  {{ day.dateLabel }}
-                </span>
-                <span class="flex min-w-0 flex-1 items-center gap-1.5">
-                  <component
-                    :is="day.visual.icon"
-                    class="size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span class="truncate text-sm">{{ day.visual.label }}</span>
-                </span>
-                <span
-                  class="text-muted-foreground flex items-center gap-1 text-xs tabular-nums"
+                <div
+                  class="mb-2 flex flex-wrap items-baseline justify-between gap-2"
                 >
-                  <Droplets class="size-3" aria-hidden="true" />
-                  {{ day.probability }}% · {{ day.sum }} mm
-                </span>
-                <span class="w-16 text-right text-sm tabular-nums">
-                  <span class="font-medium">{{ day.max }}</span>
-                  <span class="text-muted-foreground"> / {{ day.min }}</span>
-                </span>
-              </li>
-            </ul>
+                  <p class="text-sm font-medium">未来 24 小时</p>
+                  <span class="text-muted-foreground text-xs">
+                    温度与降水概率
+                  </span>
+                </div>
 
-            <div v-else class="empty-state text-muted-foreground py-10">
+                <WeatherCurve
+                  v-if="hourlySeries.length > 0"
+                  :labels="hourlyLabels"
+                  :series="hourlySeries"
+                  :precipitation="hourlyPrecipitation"
+                  :height="200"
+                />
+                <div v-else class="empty-state text-muted-foreground py-10">
+                  <span class="empty-state-icon">
+                    <CloudOff class="size-5" aria-hidden="true" />
+                  </span>
+                  <p class="text-xs">暂无逐时预报</p>
+                </div>
+              </section>
+
+              <section
+                class="bg-card shadow-soft rounded-2xl border border-border/70 p-4"
+              >
+                <div
+                  class="mb-2 flex flex-wrap items-baseline justify-between gap-2"
+                >
+                  <p class="text-sm font-medium">7 天预报</p>
+                  <span class="text-muted-foreground text-xs">
+                    最高 / 最低温
+                  </span>
+                </div>
+
+                <WeatherCurve
+                  v-if="dailySeries.length > 0"
+                  :labels="dailyLabels"
+                  :series="dailySeries"
+                  :height="180"
+                />
+
+                <ul
+                  v-if="dailyRows.length > 0"
+                  class="mt-3 flex flex-col divide-y divide-border/60"
+                >
+                  <li
+                    v-for="day in dailyRows"
+                    :key="day.key"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+                  >
+                    <span class="w-10 text-sm font-medium">
+                      {{ day.weekday }}
+                    </span>
+                    <span
+                      class="text-muted-foreground w-12 text-xs tabular-nums"
+                    >
+                      {{ day.dateLabel }}
+                    </span>
+                    <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                      <component
+                        :is="day.visual.icon"
+                        class="size-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span class="truncate text-sm">
+                        {{ day.visual.label }}
+                      </span>
+                    </span>
+                    <span
+                      class="text-muted-foreground flex items-center gap-1 text-xs tabular-nums"
+                    >
+                      <Droplets class="size-3" aria-hidden="true" />
+                      {{ day.probability }}% · {{ day.sum }} mm
+                    </span>
+                    <span class="w-16 text-right text-sm tabular-nums">
+                      <span class="font-medium">{{ day.max }}</span>
+                      <span class="text-muted-foreground">
+                        / {{ day.min }}
+                      </span>
+                    </span>
+                  </li>
+                </ul>
+
+                <div v-else class="empty-state text-muted-foreground py-10">
+                  <span class="empty-state-icon">
+                    <CloudOff class="size-5" aria-hidden="true" />
+                  </span>
+                  <p class="text-xs">暂无逐日预报</p>
+                </div>
+              </section>
+            </template>
+
+            <section
+              v-else
+              class="bg-card shadow-soft empty-state text-muted-foreground rounded-2xl border border-border/70 px-6 py-16"
+            >
               <span class="empty-state-icon">
-                <CloudOff class="size-5" aria-hidden="true" />
+                <CloudOff class="size-6" aria-hidden="true" />
               </span>
-              <p class="text-xs">暂无逐日预报</p>
-            </div>
-          </section>
-        </template>
+              <p class="text-sm">{{ emptyHint }}</p>
+              <Button
+                v-if="cities.length > 0"
+                variant="outline"
+                size="sm"
+                :disabled="refreshing"
+                @click="handleRefresh"
+              >
+                <RefreshCw data-icon="inline-start" />
+                重试
+              </Button>
+            </section>
+          </div>
 
-        <section
-          v-else
-          class="bg-card shadow-soft empty-state text-muted-foreground rounded-2xl border border-border/70 px-6 py-16"
-        >
-          <span class="empty-state-icon">
-            <CloudOff class="size-6" aria-hidden="true" />
-          </span>
-          <p class="text-sm">{{ emptyHint }}</p>
-          <Button
-            v-if="cities.length > 0"
-            variant="outline"
-            size="sm"
-            :disabled="refreshing"
-            @click="handleRefresh"
+          <div
+            v-if="switching"
+            class="bg-background/55 absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl backdrop-blur-[2px]"
+            role="status"
           >
-            <RefreshCw data-icon="inline-start" />
-            重试
-          </Button>
-        </section>
+            <LoaderCircle
+              class="size-6 animate-spin motion-reduce:animate-none"
+              aria-hidden="true"
+            />
+            <p class="text-muted-foreground text-xs">
+              正在获取 {{ switchingCityName }} 天气…
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </div>

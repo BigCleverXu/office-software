@@ -19,6 +19,12 @@ interface UseWeather {
   search: (value: string) => Promise<void>
   clearSearch: () => void
   subscribe: () => () => void
+  /** 正在切换的目标城市 id，null 表示当前无切换 */
+  switchingCityId: Ref<string | null>
+  /** 是否正在切换城市 */
+  switching: ComputedRef<boolean>
+  /** 选中态城市 id：切换中取目标城市，避免点击后高亮滞后 */
+  activeCityId: ComputedRef<string>
 }
 
 /** 城市搜索防抖间隔 */
@@ -39,6 +45,32 @@ const localError = ref<string | null>(null)
 
 /** 正在进行的 IPC 请求标记 */
 const pending = ref(false)
+
+/** 正在切换的目标城市 id，用于乐观高亮与加载反馈 */
+const switchingCityId = ref<string | null>(null)
+
+/** 切换序号：只有最后一次切换允许清理标记 */
+let switchToken = 0
+
+const switching = computed(() => switchingCityId.value !== null)
+
+const activeCityId = computed(
+  () => switchingCityId.value ?? state.value?.currentCity.id ?? ''
+)
+
+/** 标记切换开始，返回本次切换的序号 */
+function beginSwitch(cityId: string): number {
+  switchToken += 1
+  switchingCityId.value = cityId
+  return switchToken
+}
+
+/** 结束切换：仅当序号仍是最新时才清理，避免旧请求清掉新标记 */
+function endSwitch(token: number): void {
+  if (token === switchToken) {
+    switchingCityId.value = null
+  }
+}
 
 const loading = computed(
   () =>
@@ -83,10 +115,19 @@ const refresh = async (): Promise<void> => {
 const selectCity = async (cityId: string): Promise<void> => {
   if (cityId === state.value?.currentCity.id) return
   localError.value = null
+  const token = beginSwitch(cityId)
   try {
-    state.value = await window.api.weather.selectCity(cityId)
+    const next = await window.api.weather.selectCity(cityId)
+    // 过期响应不覆盖状态，保证只展示最后一次选择
+    if (token === switchToken) {
+      state.value = next
+    }
   } catch {
-    localError.value = '切换城市失败，请稍后重试'
+    if (token === switchToken) {
+      localError.value = '切换城市失败，请稍后重试'
+    }
+  } finally {
+    endSwitch(token)
   }
 }
 
@@ -105,10 +146,19 @@ function toPlainCity(city: WeatherCity): WeatherCity {
 /** 添加城市并切换过去 */
 const addCity = async (city: WeatherCity): Promise<void> => {
   localError.value = null
+  const token = beginSwitch(city.id)
   try {
-    state.value = await window.api.weather.addCity(toPlainCity(city))
+    const next = await window.api.weather.addCity(toPlainCity(city))
+    // 过期响应不覆盖状态，保证只展示最后一次选择
+    if (token === switchToken) {
+      state.value = next
+    }
   } catch {
-    localError.value = '添加城市失败，请稍后重试'
+    if (token === switchToken) {
+      localError.value = '添加城市失败，请稍后重试'
+    }
+  } finally {
+    endSwitch(token)
   }
 }
 
@@ -202,6 +252,9 @@ export function useWeather(): UseWeather {
     removeCity,
     search,
     clearSearch,
-    subscribe
+    subscribe,
+    switchingCityId,
+    switching,
+    activeCityId
   }
 }
