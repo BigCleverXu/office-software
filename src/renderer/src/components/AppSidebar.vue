@@ -68,7 +68,7 @@ const settingsItemClass = computed(() =>
     :class="collapsed ? 'w-16' : 'w-56'"
   >
     <div
-      class="flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border px-3"
+      class="app-drag flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border px-3"
     >
       <div
         class="from-foreground to-foreground/75 text-background ring-foreground/10 shadow-soft flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ring-1"

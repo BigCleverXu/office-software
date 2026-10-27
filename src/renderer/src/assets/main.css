@@ -430,6 +430,16 @@ a:focus-visible,
   }
 }
 
+/* Electron 无边框窗口拖动区域 */
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+/* 拖动区域内的可交互元素需显式排除 */
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 .page-enter-active {
   transition:
     opacity 180ms var(--ease-soft),

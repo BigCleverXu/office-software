@@ -29,6 +29,9 @@ const { isDownloading: updateDownloading, progress: updateDownloadProgress } =
   useUpdateDownload()
 const preferredDark = usePreferredDark()
 
+/** Windows 使用无边框窗口，顶部栏需要拖动区与右侧控件留白 */
+const isWindows = window.api.update.platform === 'win32'
+
 const currentModule = computed(() => moduleById(active.value))
 
 /** 顶栏模块徽章图标：设置页使用齿轮，其余沿用当前模块图标 */
@@ -109,18 +112,21 @@ onUnmounted(() => {
 
       <div class="flex min-w-0 flex-1 flex-col">
         <header
-          class="border-border/60 bg-background/80 flex h-14 shrink-0 items-center gap-3 border-b px-6 backdrop-blur"
+          class="border-border/50 bg-background/70 flex h-14 shrink-0 items-center gap-3 border-b backdrop-blur-xl"
+          :class="isWindows ? 'app-drag pl-6 pr-36' : 'px-6'"
         >
           <div
-            class="bg-muted text-foreground ring-foreground/5 shadow-soft flex size-9 shrink-0 items-center justify-center rounded-lg ring-1"
+            class="from-foreground to-foreground/70 text-background ring-foreground/10 shadow-soft flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ring-1"
           >
             <component :is="headerIcon" class="size-4" />
           </div>
-          <div class="flex flex-col">
-            <h1 class="text-lg leading-tight font-semibold tracking-tight">
+          <div class="flex min-w-0 flex-col">
+            <h1 class="text-[15px] leading-tight font-semibold tracking-tight">
               {{ pageTitle }}
             </h1>
-            <p class="text-muted-foreground text-xs">{{ pageDescription }}</p>
+            <p class="text-muted-foreground truncate text-[11px] leading-tight">
+              {{ pageDescription }}
+            </p>
           </div>
         </header>
 

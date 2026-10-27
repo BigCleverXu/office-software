@@ -67,12 +67,44 @@ let updateChecker: UpdateChecker | null = null
 /** 窗口不可见期间产生的更新结果，待重新显示时投递 */
 let pendingUpdate: UpdateCheckResult | null = null
 
+/** Windows 原生窗口控件覆盖层高度，与渲染层顶部栏（56px）对齐 */
+const TITLE_BAR_HEIGHT = 56
+
+/**
+ * 按当前生效主题刷 Windows 窗口控件覆盖层配色。
+ * 仅 Windows 生效；其他平台保持系统原生标题栏。
+ */
+function syncTitleBarOverlay(win: BrowserWindow): void {
+  if (process.platform !== 'win32' || win.isDestroyed()) {
+    return
+  }
+  const dark = nativeTheme.shouldUseDarkColors
+  win.setTitleBarOverlay({
+    color: dark ? '#0a0a0a' : '#ffffff',
+    symbolColor: dark ? '#e5e5e5' : '#1f1f1f',
+    height: TITLE_BAR_HEIGHT
+  })
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
     autoHideMenuBar: true,
+    // Windows 使用无边框 + 系统原生窗口控件覆盖层；macOS / Linux 保留原生标题栏
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
+            symbolColor: nativeTheme.shouldUseDarkColors
+              ? '#e5e5e5'
+              : '#1f1f1f',
+            height: TITLE_BAR_HEIGHT
+          }
+        }
+      : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -330,6 +362,13 @@ app.whenReady().then(() => {
   })
 
   registerSettingsIpc({ store: appSettings, getWindow: () => mainWindow })
+
+  // 主题切换时同步 Windows 窗口控件覆盖层配色
+  nativeTheme.on('updated', () => {
+    if (mainWindow) {
+      syncTitleBarOverlay(mainWindow)
+    }
+  })
 
   createWindow()
 
