@@ -7,12 +7,13 @@ import CountdownDetailDialog from '@/components/CountdownDetailDialog.vue'
 import CountdownFormDialog from '@/components/CountdownFormDialog.vue'
 import DayContextMenu from '@/components/DayContextMenu.vue'
 import DayDetailDialog from '@/components/DayDetailDialog.vue'
+import HolidayOverview from '@/components/HolidayOverview.vue'
 import MonthCalendar from '@/components/MonthCalendar.vue'
 import { Button } from '@/components/ui/button'
 import { useCalendar } from '@/composables/useCalendar'
 
 /** Tab 视图标识 */
-type CalendarTab = 'calendar' | 'countdowns'
+type CalendarTab = 'calendar' | 'countdowns' | 'holidays'
 
 const now = new Date()
 const year = ref(now.getFullYear())
@@ -238,6 +239,20 @@ const handleDetailRemove = (): void => {
         >
           倒计日
         </Button>
+        <Button
+          id="calendar-tab-holidays"
+          role="tab"
+          size="sm"
+          class="transition-all duration-200"
+          :variant="activeTab === 'holidays' ? 'secondary' : 'ghost'"
+          :aria-selected="activeTab === 'holidays'"
+          :tabindex="activeTab === 'holidays' ? 0 : -1"
+          aria-controls="calendar-panel-holidays"
+          :class="activeTab === 'holidays' ? 'shadow-soft' : ''"
+          @click="selectTab('holidays')"
+        >
+          节假日大全
+        </Button>
       </div>
 
       <Button size="sm" @click="openCreate">
@@ -313,6 +328,16 @@ const handleDetailRemove = (): void => {
             @remove="handleRemove(countdown)"
           />
         </div>
+      </section>
+
+      <section
+        v-show="activeTab === 'holidays'"
+        id="calendar-panel-holidays"
+        role="tabpanel"
+        aria-labelledby="calendar-tab-holidays"
+        class="min-h-0"
+      >
+        <HolidayOverview :year="year" />
       </section>
     </div>
 
