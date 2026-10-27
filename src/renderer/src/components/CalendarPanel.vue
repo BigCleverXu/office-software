@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { CalendarDays, Plus } from 'lucide-vue-next'
-import type { Countdown, CountdownDraft, MonthCell } from '@shared/calendar'
+import type {
+  Countdown,
+  CountdownDraft,
+  HolidayEntry,
+  MonthCell
+} from '@shared/calendar'
 import CountdownCard from '@/components/CountdownCard.vue'
 import CountdownDetailDialog from '@/components/CountdownDetailDialog.vue'
 import CountdownFormDialog from '@/components/CountdownFormDialog.vue'
@@ -37,11 +42,51 @@ const {
   remove
 } = useCalendar()
 
+/** 跨年补位日期使用的相邻年份节假日 */
+const adjacentHolidays = ref<HolidayEntry[]>([])
+
+/** 当月网格可能跨年，合并当前年与相邻年节假日 */
+const calendarHolidays = computed<HolidayEntry[]>(() =>
+  adjacentHolidays.value.length > 0
+    ? [...holidays.value, ...adjacentHolidays.value]
+    : holidays.value
+)
+
+/**
+ * 按月加载相邻年份节假日：
+ * 1 月需要上一年 12 月，12 月需要下一年 1 月，其余月份清空。
+ * 用年月快照避免快速切换时的竞态；失败时静默置空。
+ */
+async function loadAdjacentHolidays(): Promise<void> {
+  const targetYear =
+    month.value === 1
+      ? year.value - 1
+      : month.value === 12
+        ? year.value + 1
+        : null
+  if (targetYear === null) {
+    adjacentHolidays.value = []
+    return
+  }
+  const snapshotYear = year.value
+  const snapshotMonth = month.value
+  try {
+    const data = await window.api.calendar.getHolidays(targetYear)
+    if (year.value !== snapshotYear || month.value !== snapshotMonth) return
+    adjacentHolidays.value = data.entries
+  } catch {
+    if (year.value === snapshotYear && month.value === snapshotMonth) {
+      adjacentHolidays.value = []
+    }
+  }
+}
+
 // 切月或切年都重新按年份加载节假日（同一年命中缓存）
 watch(
   [year, month],
   () => {
     void loadHolidays(year.value)
+    void loadAdjacentHolidays()
   },
   { immediate: true }
 )
@@ -275,7 +320,7 @@ const handleDetailRemove = (): void => {
           <MonthCalendar
             v-model:year="year"
             v-model:month="month"
-            :holidays="holidays"
+            :holidays="calendarHolidays"
             :selected-date="selectedDate"
             :countdowns-by-date="countdownsByDate"
             @select="handleSelect"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { buildMonthGrid } from '@shared/calendar'
+import { buildMonthGrid, parseDateOnly } from '@shared/calendar'
 import type {
   Countdown,
   HolidayEntry,
@@ -51,12 +51,21 @@ const TAG_LABELS: Record<HolidayType, string> = {
   workday: '班'
 }
 
+/** 今天标签样式：中性配色，与「休 / 班」保持同一胶囊规格 */
+const TODAY_TAG_STYLE = 'bg-primary/10 text-primary'
+
 /** 按本地时区格式化为 YYYY-MM-DD */
 function formatDateOnly(date: Date): string {
   const year = String(date.getFullYear()).padStart(4, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/** 将 YYYY-MM-DD 偏移指定天数，返回同一格式 */
+function shiftDate(date: string, offset: number): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return formatDateOnly(new Date(year, month - 1, day + offset))
 }
 
 const todayKey = formatDateOnly(new Date())
@@ -78,7 +87,6 @@ const monthLabel = computed(() => `${props.year} 年 ${props.month} 月`)
 const lunarLabels = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {}
   for (const cell of grid.value) {
-    if (!cell.inMonth) continue
     const label = getLunarLabel(cell.date)
     if (label) {
       map[cell.date] = label
@@ -113,21 +121,28 @@ const TAG_BASE_CLASS = [
   'text-[10px] leading-4 font-medium'
 ]
 
-/** 右上角标签的样式：定位 + 类型配色 */
+/** 右上角标签的样式：定位 + 类型配色，今天优先 */
 function tagClass(date: string): string[] {
+  if (date === todayKey) return [...TAG_BASE_CLASS, TODAY_TAG_STYLE]
   const entry = holidayOf(date)
   return entry ? [...TAG_BASE_CLASS, TAG_STYLES[entry.type]] : TAG_BASE_CLASS
 }
 
-/** 右上角标签文案 */
+/** 右上角标签文案：今天优先于节假日 / 补班标签 */
 function tagLabel(date: string): string {
+  if (date === todayKey) return '今'
   const entry = holidayOf(date)
   return entry ? TAG_LABELS[entry.type] : ''
 }
 
-/** 节日 / 补班名称 */
-function holidayName(date: string): string {
-  return holidayOf(date)?.name ?? ''
+/** 需要展示的节假日名称：仅连续同名假期的首日返回名称 */
+function visibleHolidayName(date: string): string {
+  const entry = holidayOf(date)
+  if (!entry || entry.type !== 'holiday') return ''
+  const prev = holidayMap.value[shiftDate(date, -1)]
+  const isFirstDay =
+    !prev || prev.type !== 'holiday' || prev.name !== entry.name
+  return isFirstDay ? entry.name : ''
 }
 
 /**
@@ -148,8 +163,9 @@ function dayClass(cell: MonthCell, index: number): string[] {
   return shouldMarkRed(cell, index) ? ['text-red-600 dark:text-red-400'] : []
 }
 
-/** 节日名称样式：选中用前景色，法定休假标红 */
+/** 节日名称样式：选中用前景色，法定休假标红，补位日期弱化 */
 function holidayNameClass(cell: MonthCell): string[] {
+  if (!cell.inMonth) return ['text-muted-foreground/60']
   if (isSelected(cell.date)) return ['text-primary-foreground']
   return isHolidayDate(cell.date)
     ? ['text-red-600 dark:text-red-400']
@@ -217,16 +233,26 @@ function handleContextMenu(cell: MonthCell, event: MouseEvent): void {
   emit('context-menu', { cell, x: event.clientX, y: event.clientY })
 }
 
+/** 点击单元格：补位日期先跳转到其所属年月，再选中该日期 */
+function handleCellClick(cell: MonthCell): void {
+  if (!cell.inMonth) {
+    const target = parseDateOnly(cell.date)
+    if (target) {
+      emit('update:year', target.getFullYear())
+      emit('update:month', target.getMonth() + 1)
+    }
+  }
+  emit('select', cell)
+}
+
 /** 单元格样式：补位、周末、今天、选中分别为独立静态类名 */
 function cellClass(cell: MonthCell, index: number): string[] {
   const selected = props.selectedDate === cell.date
   return [
     'relative flex min-h-[88px] flex-col items-start gap-0.5',
     'overflow-hidden rounded-lg border border-transparent p-1.5 text-left transition-all duration-200',
-    cell.inMonth ? '' : 'text-muted-foreground/40 cursor-default',
-    cell.inMonth && !selected
-      ? 'hover:border-foreground/10 hover:bg-muted'
-      : '',
+    cell.inMonth ? '' : 'text-muted-foreground/50',
+    !selected ? 'hover:border-foreground/10 hover:bg-muted' : '',
     cell.inMonth && isWeekend(index) && !selected ? 'bg-muted/40' : '',
     cell.inMonth && cell.date === todayKey && !selected
       ? 'ring-1 ring-primary/60'
@@ -281,11 +307,10 @@ function cellClass(cell: MonthCell, index: number): string[] {
         v-for="(cell, index) in grid"
         :key="cell.date"
         type="button"
-        :disabled="!cell.inMonth"
         :aria-label="cell.date"
         :aria-pressed="selectedDate === cell.date"
         :class="cellClass(cell, index)"
-        @click="emit('select', cell)"
+        @click="handleCellClick(cell)"
         @contextmenu.prevent="handleContextMenu(cell, $event)"
       >
         <span
@@ -296,7 +321,7 @@ function cellClass(cell: MonthCell, index: number): string[] {
         </span>
 
         <span
-          v-if="cell.inMonth && lunarLabelOf(cell.date)"
+          v-if="lunarLabelOf(cell.date) && !visibleHolidayName(cell.date)"
           class="w-full min-w-0 truncate text-[10px] leading-4"
           :class="
             isSelected(cell.date)
@@ -307,19 +332,16 @@ function cellClass(cell: MonthCell, index: number): string[] {
           {{ lunarLabelOf(cell.date) }}
         </span>
 
-        <span
-          v-if="cell.inMonth && holidayOf(cell.date)"
-          :class="tagClass(cell.date)"
-        >
+        <span v-if="tagLabel(cell.date)" :class="tagClass(cell.date)">
           {{ tagLabel(cell.date) }}
         </span>
 
         <span
-          v-if="cell.inMonth && holidayOf(cell.date)"
+          v-if="visibleHolidayName(cell.date)"
           class="w-full min-w-0 truncate text-[10px] leading-4"
           :class="holidayNameClass(cell)"
         >
-          {{ holidayName(cell.date) }}
+          {{ visibleHolidayName(cell.date) }}
         </span>
 
         <span
@@ -350,27 +372,6 @@ function cellClass(cell: MonthCell, index: number): string[] {
           </span>
         </span>
       </button>
-    </div>
-
-    <div class="text-muted-foreground mt-3 flex items-center gap-3 text-xs">
-      <span class="flex items-center gap-1.5">
-        <span
-          class="rounded px-1 text-[10px] leading-4 font-medium"
-          :class="TAG_STYLES.holiday"
-        >
-          休
-        </span>
-        = 法定节假日
-      </span>
-      <span class="flex items-center gap-1.5">
-        <span
-          class="rounded px-1 text-[10px] leading-4 font-medium"
-          :class="TAG_STYLES.workday"
-        >
-          班
-        </span>
-        = 调休补班
-      </span>
     </div>
   </div>
 </template>
