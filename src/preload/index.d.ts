@@ -6,6 +6,7 @@ import type { UpdateApi } from '../shared/update'
 import type { SettingsApi } from '../shared/settings'
 import type { CalendarApi } from '../shared/calendar'
 import type { NewsApi } from '../shared/news'
+import type { WeatherApi } from '../shared/weather'
 
 declare global {
   interface Window {
@@ -18,6 +19,7 @@ declare global {
       calendar: CalendarApi
       settings: SettingsApi
       news: NewsApi
+      weather: WeatherApi
     }
   }
 }

@@ -4,6 +4,7 @@ import type { Component } from 'vue'
 import {
   AlarmClock,
   CalendarDays,
+  CloudSun,
   LineChart,
   Newspaper,
   StickyNote
@@ -14,6 +15,7 @@ import CalendarPanel from '@/components/CalendarPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
+import WeatherPanel from '@/components/WeatherPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
 export interface ModuleMeta {
@@ -51,6 +53,13 @@ export const MODULES: ModuleMeta[] = [
     description: '大盘指数与自选股行情，交易时段自动刷新',
     icon: LineChart,
     component: MarketPanel
+  },
+  {
+    id: 'weather',
+    label: '天气',
+    description: '实时天气与一周预报，常用城市快速切换',
+    icon: CloudSun,
+    component: WeatherPanel
   },
   {
     id: 'news',

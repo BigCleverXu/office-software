@@ -51,6 +51,13 @@ import {
   type SettingsApi,
   type SettingsViewState
 } from '../shared/settings'
+import {
+  WEATHER_CHANNELS,
+  type WeatherApi,
+  type WeatherCity,
+  type WeatherSearchResult,
+  type WeatherViewState
+} from '../shared/weather'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -238,6 +245,32 @@ const news: NewsApi = {
   }
 }
 
+// 暴露给渲染进程的天气 API
+const weather: WeatherApi = {
+  getState: () => ipcRenderer.invoke(WEATHER_CHANNELS.getState),
+  search: (keyword: string): Promise<WeatherSearchResult> =>
+    ipcRenderer.invoke(WEATHER_CHANNELS.search, keyword),
+  selectCity: (cityId: string) =>
+    ipcRenderer.invoke(WEATHER_CHANNELS.selectCity, cityId),
+  addCity: (city: WeatherCity) =>
+    ipcRenderer.invoke(WEATHER_CHANNELS.addCity, city),
+  removeCity: (cityId: string) =>
+    ipcRenderer.invoke(WEATHER_CHANNELS.removeCity, cityId),
+  refresh: () => ipcRenderer.invoke(WEATHER_CHANNELS.refresh),
+  onStateChanged: (callback: (state: WeatherViewState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: WeatherViewState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(WEATHER_CHANNELS.stateChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(WEATHER_CHANNELS.stateChanged, listener)
+    }
+  }
+}
+
 /** 从启动参数解析首帧主题，仅接受三个合法值，否则回退 'system' */
 function readInitialTheme(): AppTheme {
   const prefix = '--app-theme='
@@ -274,7 +307,16 @@ const settings: SettingsApi = {
   }
 }
 
-const api = { alarms, market, update, notes, calendar, settings, news }
+const api = {
+  alarms,
+  market,
+  update,
+  notes,
+  calendar,
+  settings,
+  news,
+  weather
+}
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
 if (process.contextIsolated) {

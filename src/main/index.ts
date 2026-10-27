@@ -23,9 +23,12 @@ import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { NoteStore } from './note-store'
 import { NewsStore } from './news-store'
+import { WeatherStore } from './weather-store'
+import { WeatherService } from './weather-service'
 import { CountdownStore } from './countdown-store'
 import { HolidayService } from './holiday-service'
 import { CALENDAR_CHANNELS } from '../shared/calendar'
+import { WEATHER_CHANNELS } from '../shared/weather'
 import {
   applyLaunchAtLoginSetting,
   registerAlarmIpc,
@@ -34,7 +37,8 @@ import {
   registerNewsIpc,
   registerNotesIpc,
   registerSettingsIpc,
-  registerUpdateIpc
+  registerUpdateIpc,
+  registerWeatherIpc
 } from './ipc'
 import { fetchQuotes } from './quote-provider'
 import { fetchUsQuotes } from './us-quote-provider'
@@ -281,6 +285,15 @@ app.whenReady().then(() => {
   const newsStore = new NewsStore(db)
   registerNewsIpc({ store: newsStore, getWindow: () => mainWindow })
 
+  const weatherStore = new WeatherStore(db)
+  const weatherService = new WeatherService({
+    store: weatherStore,
+    onChanged: (state) => {
+      mainWindow?.webContents.send(WEATHER_CHANNELS.stateChanged, state)
+    }
+  })
+  registerWeatherIpc({ service: weatherService, getWindow: () => mainWindow })
+
   const countdownStore = new CountdownStore(db)
   // 后台刷新成功后主动推送，渲染层无需轮询
   const holidayService = new HolidayService({
@@ -374,6 +387,9 @@ app.whenReady().then(() => {
 
   // 后台预热当前年份节假日缓存，不阻塞启动
   void holidayService.refresh(new Date().getFullYear())
+
+  // 启动后加载已保存城市的天气，不阻塞启动
+  void weatherService.initialize()
 
   // 窗口就绪后再启动自动检查，避免首次结果无处投递
   const checker = new UpdateChecker({
