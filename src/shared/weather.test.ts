@@ -277,14 +277,15 @@ describe('DEFAULT_CITY', () => {
 })
 
 describe('APP_MODULE_IDS', () => {
-  it('包含 weather 且顺序为提醒/日历/行情/天气/热点/便签', () => {
+  it('包含 weather 且顺序为提醒/日历/行情/天气/热点/便签/游戏', () => {
     expect(APP_MODULE_IDS).toEqual([
       'alarms',
       'calendar',
       'market',
       'weather',
       'news',
-      'notes'
+      'notes',
+      'games'
     ])
   })
 

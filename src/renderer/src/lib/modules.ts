@@ -5,6 +5,7 @@ import {
   AlarmClock,
   CalendarDays,
   CloudSun,
+  Gamepad2,
   LineChart,
   Newspaper,
   StickyNote
@@ -12,6 +13,7 @@ import {
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
 import CalendarPanel from '@/components/CalendarPanel.vue'
+import GamesPanel from '@/components/GamesPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
@@ -74,6 +76,13 @@ export const MODULES: ModuleMeta[] = [
     description: '随手记录、置顶与检索本地便签',
     icon: StickyNote,
     component: NotesPanel
+  },
+  {
+    id: 'games',
+    label: '游戏',
+    description: '单机小游戏，休息时放松一下',
+    icon: Gamepad2,
+    component: GamesPanel
   }
 ]
 
