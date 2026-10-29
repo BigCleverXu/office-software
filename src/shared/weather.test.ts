@@ -277,7 +277,7 @@ describe('DEFAULT_CITY', () => {
 })
 
 describe('APP_MODULE_IDS', () => {
-  it('包含 weather 且顺序为提醒/日历/行情/天气/热点/便签/游戏', () => {
+  it('包含 weather 且顺序为提醒/日历/行情/天气/热点/便签/文件/游戏', () => {
     expect(APP_MODULE_IDS).toEqual([
       'alarms',
       'calendar',
@@ -285,13 +285,16 @@ describe('APP_MODULE_IDS', () => {
       'weather',
       'news',
       'notes',
+      'files',
       'games'
     ])
   })
 
-  it('isAppModuleId 识别 weather', () => {
+  it('isAppModuleId 识别 weather 与 files', () => {
     expect(isAppModuleId('weather')).toBe(true)
     expect(isAppModuleId('weathers')).toBe(false)
+    expect(isAppModuleId('files')).toBe(true)
+    expect(isAppModuleId('file')).toBe(false)
     expect(isAppModuleId(null)).toBe(false)
   })
 })

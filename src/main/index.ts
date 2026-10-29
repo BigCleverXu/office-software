@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, protocol, shell } from 'electron'
 import type { Tray } from 'electron'
 import type { DatabaseSync } from 'node:sqlite'
 import { join } from 'path'
@@ -33,6 +33,7 @@ import {
   applyLaunchAtLoginSetting,
   registerAlarmIpc,
   registerCalendarIpc,
+  registerFileSearchIpc,
   registerMarketIpc,
   registerNewsIpc,
   registerNotesIpc,
@@ -46,6 +47,10 @@ import { createTray } from './tray'
 import { showAlarmNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
 import { SettingsStore } from './settings-store'
+import { FileIndexStore } from './file-index-store'
+import { FileSearchService } from './file-search-service'
+import { createFileResponse, parseAppFilePath } from './file-protocol'
+import { FILE_SEARCH_CHANNELS } from '../shared/files'
 import { getIntervalMs } from '../shared/interval'
 import {
   UPDATE_CHANNELS,
@@ -53,6 +58,22 @@ import {
   type UpdateCheckResult
 } from '../shared/update'
 import { UpdateChecker } from './update-checker'
+
+// 只读本地文件协议必须在 app ready 之前注册为特权 scheme，
+// 否则渲染层的 img / media 无法直接加载 app-file: 资源
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app-file',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      // 渲染层 img / media 跨源加载需要 CORS
+      corsEnabled: true
+    }
+  }
+])
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -233,6 +254,29 @@ app.whenReady().then(() => {
   const appSettings = new SettingsStore(db)
   settingsStore = appSettings
 
+  // 文件搜索：索引与设置复用同一数据库，状态 / 进度推送到主窗口
+  const fileSearchService = new FileSearchService({
+    store: new FileIndexStore(db),
+    onStateChanged: (state) => {
+      mainWindow?.webContents.send(FILE_SEARCH_CHANNELS.stateChanged, state)
+    },
+    onScanProgress: (progress) => {
+      mainWindow?.webContents.send(FILE_SEARCH_CHANNELS.scanProgress, progress)
+    }
+  })
+
+  // 只读本地文件协议：仅允许已配置搜索目录内的文件，越界返回 403
+  protocol.handle('app-file', async (request) => {
+    const filePath = parseAppFilePath(request.url)
+    if (filePath === null) {
+      return new Response('Bad Request', { status: 400 })
+    }
+    if (!(await fileSearchService.isPathAllowed(filePath))) {
+      return new Response('Forbidden', { status: 403 })
+    }
+    return createFileResponse(filePath, request.headers.get('range'))
+  })
+
   // 启动时以设置对齐系统登录项；失败只记录，不阻塞启动
   try {
     applyLaunchAtLoginSetting(appSettings.get().launchAtLogin)
@@ -376,6 +420,11 @@ app.whenReady().then(() => {
 
   registerSettingsIpc({ store: appSettings, getWindow: () => mainWindow })
 
+  registerFileSearchIpc({
+    service: fileSearchService,
+    getWindow: () => mainWindow
+  })
+
   // 主题切换时同步 Windows 窗口控件覆盖层配色
   nativeTheme.on('updated', () => {
     if (mainWindow) {
@@ -384,6 +433,9 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // 索引为空或距上次扫描超过阈值时后台重建，不阻塞界面
+  fileSearchService.startIfStale()
 
   // 后台预热当前年份节假日缓存，不阻塞启动
   void holidayService.refresh(new Date().getFullYear())

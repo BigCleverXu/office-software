@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { CalendarRange } from 'lucide-vue-next'
-import { daysUntil } from '@shared/calendar'
+import { daysUntil, parseDateOnly } from '@shared/calendar'
 import { getYearFestivals } from '@/lib/festivals'
 import type { FestivalEntry } from '@/lib/festivals'
+import { useToday } from '@/composables/useToday'
 import {
   Select,
   SelectContent,
@@ -52,16 +53,8 @@ const MONTH_ABBRS = [
 const BASE_YEAR = new Date().getFullYear()
 const YEAR_RANGE = 10
 
-/** 本地时区的今天，格式 YYYY-MM-DD */
-const TODAY_KEY = formatToday()
-
-/** 生成今天日期键 */
-function formatToday(): string {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
+/** 本地时区的今天，跨零点自动更新 */
+const today = useToday()
 
 /** 年份下拉选项，允许外部传入的年份超出默认范围 */
 const yearOptions = computed<number[]>(() => {
@@ -105,7 +98,7 @@ function handleYearChange(value: unknown): void {
 
 /** 是否为今天 */
 function isToday(date: string): boolean {
-  return date === TODAY_KEY
+  return date === today.value
 }
 
 /** 名称后的中括号信息，如「[冬月十三 01-01]」 */
@@ -115,7 +108,7 @@ function metaLabel(entry: FestivalEntry): string {
 
 /** 距离今天的状态文案 */
 function statusLabel(date: string): string {
-  const diff = daysUntil(date)
+  const diff = daysUntil(date, parseDateOnly(today.value) ?? new Date())
   if (diff === null) {
     return ''
   }

@@ -16,7 +16,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -59,6 +59,25 @@ CREATE TABLE IF NOT EXISTS holiday_cache (
 );
 `
 
+/** file_index 表与索引建表语句（v4 新增，也用于旧版本升级） */
+const FILE_INDEX_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS file_index (
+  path        TEXT PRIMARY KEY,
+  root        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  name_lower  TEXT NOT NULL,
+  dir         TEXT NOT NULL,
+  extension   TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL,
+  size        INTEGER NOT NULL DEFAULT 0,
+  modified_at INTEGER NOT NULL DEFAULT 0,
+  run_token   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_file_index_name ON file_index(name_lower);
+CREATE INDEX IF NOT EXISTS idx_file_index_kind ON file_index(kind);
+CREATE INDEX IF NOT EXISTS idx_file_index_root ON file_index(root);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -88,7 +107,8 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 ${NOTES_TABLE_SQL}
 ${COUNTDOWNS_TABLE_SQL}
-${HOLIDAY_CACHE_TABLE_SQL}`
+${HOLIDAY_CACHE_TABLE_SQL}
+${FILE_INDEX_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -178,7 +198,8 @@ function readUserVersion(db: DatabaseSync): number {
 /**
  * 按 PRAGMA user_version 逐版本升级表结构：
  * v0 全新建库建全部表；v1 先补 notes 表；随后在 v3 之前补
- * countdowns / holiday_cache 表；已是最新版本则直接返回。
+ * countdowns / holiday_cache 表；v4 之前补 file_index 表及其索引；
+ * 已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -197,6 +218,10 @@ function applySchema(db: DatabaseSync): void {
       // v1 / v2 -> v3：新增日历相关表；v0 时重复执行 IF NOT EXISTS 也安全
       db.exec(COUNTDOWNS_TABLE_SQL)
       db.exec(HOLIDAY_CACHE_TABLE_SQL)
+    }
+    if (version < 4) {
+      // v1 / v2 / v3 -> v4：新增文件索引表；v0 时重复执行也安全
+      db.exec(FILE_INDEX_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')

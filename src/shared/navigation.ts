@@ -2,7 +2,14 @@
 
 /** 应用模块标识 */
 export type AppModuleId =
-  'alarms' | 'calendar' | 'market' | 'weather' | 'news' | 'notes' | 'games'
+  | 'alarms'
+  | 'calendar'
+  | 'market'
+  | 'weather'
+  | 'news'
+  | 'notes'
+  | 'files'
+  | 'games'
 
 /** 全部合法模块标识，顺序即侧边栏展示顺序 */
 export const APP_MODULE_IDS: readonly AppModuleId[] = [
@@ -12,6 +19,7 @@ export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'weather',
   'news',
   'notes',
+  'files',
   'games'
 ]
 

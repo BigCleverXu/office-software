@@ -10,6 +10,7 @@ import type {
 } from '@shared/calendar'
 import { Button } from '@/components/ui/button'
 import { getLunarLabel } from '@/lib/almanac'
+import { useToday } from '@/composables/useToday'
 
 /** 单元格内直接展示的倒计日条数上限 */
 const MAX_VISIBLE_COUNTDOWNS = 2
@@ -68,7 +69,7 @@ function shiftDate(date: string, offset: number): string {
   return formatDateOnly(new Date(year, month - 1, day + offset))
 }
 
-const todayKey = formatDateOnly(new Date())
+const todayKey = useToday()
 
 const grid = computed(() => buildMonthGrid(props.year, props.month))
 
@@ -123,14 +124,14 @@ const TAG_BASE_CLASS = [
 
 /** 右上角标签的样式：定位 + 类型配色，今天优先 */
 function tagClass(date: string): string[] {
-  if (date === todayKey) return [...TAG_BASE_CLASS, TODAY_TAG_STYLE]
+  if (date === todayKey.value) return [...TAG_BASE_CLASS, TODAY_TAG_STYLE]
   const entry = holidayOf(date)
   return entry ? [...TAG_BASE_CLASS, TAG_STYLES[entry.type]] : TAG_BASE_CLASS
 }
 
 /** 右上角标签文案：今天优先于节假日 / 补班标签 */
 function tagLabel(date: string): string {
-  if (date === todayKey) return '今'
+  if (date === todayKey.value) return '今'
   const entry = holidayOf(date)
   return entry ? TAG_LABELS[entry.type] : ''
 }
@@ -212,12 +213,12 @@ function shiftMonth(offset: number): void {
 
 /** 回到今天所在月份并选中今天 */
 function goToday(): void {
-  const now = new Date()
-  emit('update:year', now.getFullYear())
-  emit('update:month', now.getMonth() + 1)
+  const target = parseDateOnly(todayKey.value) ?? new Date()
+  emit('update:year', target.getFullYear())
+  emit('update:month', target.getMonth() + 1)
   emit('select', {
-    date: formatDateOnly(now),
-    day: now.getDate(),
+    date: todayKey.value,
+    day: Number(todayKey.value.slice(8)),
     inMonth: true
   })
 }
@@ -254,7 +255,7 @@ function cellClass(cell: MonthCell, index: number): string[] {
     cell.inMonth ? '' : 'text-muted-foreground/50',
     !selected ? 'hover:border-foreground/10 hover:bg-muted' : '',
     cell.inMonth && isWeekend(index) && !selected ? 'bg-muted/40' : '',
-    cell.inMonth && cell.date === todayKey && !selected
+    cell.inMonth && cell.date === todayKey.value && !selected
       ? 'ring-1 ring-primary/60'
       : '',
     selected ? 'bg-primary text-primary-foreground shadow-soft' : ''

@@ -5,6 +5,7 @@ import {
   AlarmClock,
   CalendarDays,
   CloudSun,
+  FolderSearch,
   Gamepad2,
   LineChart,
   Newspaper,
@@ -13,6 +14,7 @@ import {
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
 import CalendarPanel from '@/components/CalendarPanel.vue'
+import FileSearchPanel from '@/components/FileSearchPanel.vue'
 import GamesPanel from '@/components/GamesPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
@@ -76,6 +78,13 @@ export const MODULES: ModuleMeta[] = [
     description: '随手记录、置顶与检索本地便签',
     icon: StickyNote,
     component: NotesPanel
+  },
+  {
+    id: 'files',
+    label: '文件',
+    description: '本地文件极速搜索，按类型筛选与预览',
+    icon: FolderSearch,
+    component: FileSearchPanel
   },
   {
     id: 'games',

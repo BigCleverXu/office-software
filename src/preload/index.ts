@@ -58,6 +58,17 @@ import {
   type WeatherSearchResult,
   type WeatherViewState
 } from '../shared/weather'
+import {
+  FILE_SEARCH_CHANNELS,
+  type FileActionResult,
+  type FilePreviewResult,
+  type FileRootsResult,
+  type FileScanProgress,
+  type FileSearchApi,
+  type FileSearchQuery,
+  type FileSearchResult,
+  type FileSearchState
+} from '../shared/files'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -307,6 +318,50 @@ const settings: SettingsApi = {
   }
 }
 
+// 暴露给渲染进程的文件搜索 API
+const files: FileSearchApi = {
+  getState: (): Promise<FileSearchState> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.getState),
+  search: (query: FileSearchQuery): Promise<FileSearchResult> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.search, query),
+  addRoots: (): Promise<FileRootsResult> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.addRoots),
+  removeRoot: (root: string): Promise<FileSearchState> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.removeRoot, root),
+  rescan: (): Promise<FileSearchState> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.rescan),
+  preview: (path: string): Promise<FilePreviewResult> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.preview, path),
+  open: (path: string): Promise<FileActionResult> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.open, path),
+  reveal: (path: string): Promise<FileActionResult> =>
+    ipcRenderer.invoke(FILE_SEARCH_CHANNELS.reveal, path),
+  onStateChanged: (callback: (state: FileSearchState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: FileSearchState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(FILE_SEARCH_CHANNELS.stateChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(FILE_SEARCH_CHANNELS.stateChanged, listener)
+    }
+  },
+  onScanProgress: (callback: (progress: FileScanProgress) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: FileScanProgress
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(FILE_SEARCH_CHANNELS.scanProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(FILE_SEARCH_CHANNELS.scanProgress, listener)
+    }
+  }
+}
+
 const api = {
   alarms,
   market,
@@ -315,7 +370,8 @@ const api = {
   calendar,
   settings,
   news,
-  weather
+  weather,
+  files
 }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API
