@@ -25,7 +25,7 @@ import {
   type FileSearchResult,
   type FileSearchState
 } from '../shared/files'
-import type { FileIndexStore } from './file-index-store'
+import { FILE_INDEX_VERSION, type FileIndexStore } from './file-index-store'
 import { scanRoots } from './file-scanner'
 import { toAppFileUrl } from './file-protocol'
 
@@ -92,13 +92,14 @@ function isInside(root: string, target: string): boolean {
 /** 由绝对路径与 stat 结果构造索引条目 */
 function entryOf(target: string, stats: Stats): FileEntry {
   const name = basename(target)
+  const isDir = stats.isDirectory()
   return {
     path: target,
     name,
     dir: dirname(target),
-    extension: fileExtensionOf(name),
-    kind: fileKindOf(name),
-    size: stats.size,
+    extension: isDir ? '' : fileExtensionOf(name),
+    kind: isDir ? 'folder' : fileKindOf(name),
+    size: isDir ? 0 : stats.size,
     modifiedAt: Math.round(stats.mtimeMs)
   }
 }
@@ -333,7 +334,10 @@ export class FileSearchService {
       typeof now === 'number' && Number.isFinite(now) ? now : Date.now()
     const indexedAt = this.store.getIndexedAt()
     const roots = this.store.getRoots()
-    const stale = indexedAt === null || at - indexedAt >= RESCAN_INTERVAL_MS
+    const stale =
+      indexedAt === null ||
+      at - indexedAt >= RESCAN_INTERVAL_MS ||
+      this.store.getIndexVersion() !== FILE_INDEX_VERSION
     if (roots.length > 0 && stale) {
       this.rescan()
       return
@@ -360,6 +364,7 @@ export class FileSearchService {
         }
       }
       this.store.setIndexedAt(Date.now())
+      this.store.setIndexVersion(FILE_INDEX_VERSION)
     } catch (error) {
       console.error('文件扫描失败:', error)
     } finally {
@@ -488,17 +493,21 @@ export class FileSearchService {
     const target = resolve(filePath)
     try {
       const stats = await fs.stat(target)
-      if (!stats.isFile()) {
-        return { ok: false, error: '文件不存在或已被移动' }
+      if (!stats.isFile() && !stats.isDirectory()) {
+        return { ok: false, error: '文件或文件夹不存在或已被移动' }
       }
       return { ok: true, entry: entryOf(target, stats) }
     } catch {
-      return { ok: false, error: '文件不存在或已被移动' }
+      return { ok: false, error: '文件或文件夹不存在或已被移动' }
     }
   }
 
   /** 按扩展名 / 类型构造预览内容 */
   private async buildPreview(entry: FileEntry): Promise<PreviewOutcome> {
+    // 文件夹不做内容预览，统一降级为不支持
+    if (entry.kind === 'folder') {
+      return { preview: { type: 'unsupported' } }
+    }
     const { extension, path } = entry
     if (IMAGE_EXTENSIONS.includes(extension)) {
       return { preview: { type: 'image', url: toAppFileUrl(path) } }

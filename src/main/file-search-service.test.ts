@@ -16,7 +16,7 @@ import {
   type FileSearchState
 } from '../shared/files'
 import { closeDatabase, openDatabase } from './database'
-import { FileIndexStore } from './file-index-store'
+import { FILE_INDEX_VERSION, FileIndexStore } from './file-index-store'
 import {
   FileSearchService,
   type FileSearchServiceOptions
@@ -237,12 +237,30 @@ describe('FileSearchService.preview', () => {
     })
     expect(await service.preview(join(root, 'missing.txt'))).toEqual({
       ok: false,
-      error: '文件不存在或已被移动'
+      error: '文件或文件夹不存在或已被移动'
     })
     expect(await service.preview(42)).toEqual({
       ok: false,
       error: '文件路径无效'
     })
+  })
+
+  it('文件夹预览返回 unsupported 且 ok 为 true', async () => {
+    const folderPath = join(root, 'docs')
+    await mkdir(folderPath, { recursive: true })
+    store.setRoots([root])
+    const service = createService()
+
+    const result = await service.preview(folderPath)
+    expect(result.ok).toBe(true)
+    expect(result.entry).toMatchObject({
+      path: folderPath,
+      name: 'docs',
+      extension: '',
+      kind: 'folder',
+      size: 0
+    })
+    expect(result.preview).toEqual({ type: 'unsupported' })
   })
 
   it('大文本截断、二进制嗅探、媒体与不支持类型', async () => {
@@ -341,6 +359,7 @@ describe('FileSearchService 扫描调度', () => {
 
     expect(service.getState().indexedCount).toBe(2)
     expect(service.getState().indexedAt).not.toBeNull()
+    expect(store.getIndexVersion()).toBe(FILE_INDEX_VERSION)
     expect(states.length).toBeGreaterThan(0)
     expect(progress.some((item) => item.done)).toBe(true)
     expect(service.search({ keyword: 'alpha' }).total).toBe(1)
@@ -392,6 +411,25 @@ describe('FileSearchService 扫描调度', () => {
     await waitFor(() => !service.getState().scanning)
   })
 
+  it('索引版本与当前版本不一致时触发重扫', async () => {
+    store.setRoots([root])
+    store.setIndexedAt(Date.now())
+    const scan = vi.fn(async (): Promise<FileScanSummary> => ({
+      scanned: 0,
+      rootCounts: {}
+    }))
+    const service = createService({ scan })
+
+    service.startIfStale(Date.now())
+    expect(scan).toHaveBeenCalledTimes(1)
+    await waitFor(() => !service.getState().scanning)
+    expect(store.getIndexVersion()).toBe(FILE_INDEX_VERSION)
+
+    // 版本已对齐且未过期，不再重扫
+    service.startIfStale(Date.now())
+    expect(scan).toHaveBeenCalledTimes(1)
+  })
+
   it('扫描中移除目录后，该目录的后续批次与索引行都不再写入', async () => {
     const nested = join(root, 'docs')
     await mkdir(nested, { recursive: true })
@@ -435,9 +473,11 @@ describe('FileSearchService 扫描调度', () => {
     service.rescan()
     await waitFor(() => !service.getState().scanning, 10000)
 
-    expect(service.getState().indexedCount).toBe(2)
+    // docs、pics 两个文件夹 + 两个文件
+    expect(service.getState().indexedCount).toBe(4)
     expect(
       service.search({ keyword: 'alpha' }).entries.map((entry) => entry.path)
     ).toEqual([join(root, 'docs', 'alpha.txt')])
+    expect(service.search({ keyword: 'docs' }).entries[0].kind).toBe('folder')
   })
 })

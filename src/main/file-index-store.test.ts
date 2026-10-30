@@ -8,13 +8,16 @@ import {
   type FileKind
 } from '../shared/files'
 import { closeDatabase, openDatabase } from './database'
-import { FileIndexStore } from './file-index-store'
+import { FILE_INDEX_VERSION, FileIndexStore } from './file-index-store'
 
 /** settings 中目录配置的键名（测试直接写库时使用） */
 const ROOTS_KEY = 'file_search_roots'
 
 /** settings 中扫描时间的键名 */
 const INDEXED_AT_KEY = 'file_search_indexed_at'
+
+/** settings 中索引版本号的键名 */
+const INDEX_VERSION_KEY = 'file_search_index_version'
 
 let db: DatabaseSync
 let store: FileIndexStore
@@ -39,6 +42,21 @@ function makeEntry(path: string, modifiedAt = 0, size = 1024): FileEntry {
     extension: fileExtensionOf(name),
     kind: fileKindOf(name),
     size,
+    modifiedAt
+  }
+}
+
+/** 由绝对路径构造一条文件夹 FileEntry */
+function makeFolderEntry(path: string, modifiedAt = 100): FileEntry {
+  const name = path.split('/').pop() ?? path
+  const dir = path.slice(0, path.length - name.length - 1)
+  return {
+    path,
+    name,
+    dir,
+    extension: '',
+    kind: 'folder',
+    size: 0,
     modifiedAt
   }
 }
@@ -167,6 +185,36 @@ describe('FileIndexStore.search 数量与筛选', () => {
       image: 1,
       document: 2,
       video: 1
+    })
+  })
+
+  it('文件夹行可搜索、计入 counts.folder 并可按 kind 过滤', () => {
+    store.upsertBatch('/root', 1, [
+      makeFolderEntry('/root/report-dir'),
+      makeEntry('/root/report.pdf')
+    ])
+
+    const all = store.search({ keyword: 'report' })
+    expect(all.total).toBe(2)
+    expect(all.counts.folder).toBe(1)
+    expect(all.counts.document).toBe(1)
+
+    const filtered = store.search({ keyword: 'report', kind: 'folder' })
+    expect(filtered.entries).toHaveLength(1)
+    expect(filtered.entries[0]).toMatchObject({
+      path: '/root/report-dir',
+      name: 'report-dir',
+      dir: '/root',
+      extension: '',
+      kind: 'folder',
+      size: 0
+    })
+    expect(filtered.total).toBe(1)
+    // counts 不受 kind 过滤影响
+    expect(filtered.counts).toEqual({
+      ...zeroCounts(),
+      folder: 1,
+      document: 1
     })
   })
 
@@ -304,6 +352,21 @@ describe('FileIndexStore 扫描时间', () => {
       'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
     ).run(INDEXED_AT_KEY, 'broken')
     expect(store.getIndexedAt()).toBeNull()
+  })
+})
+
+describe('FileIndexStore 索引版本', () => {
+  it('getIndexVersion / setIndexVersion 往返正确，坏数据返回 null', () => {
+    expect(FILE_INDEX_VERSION).toBe(1)
+    expect(store.getIndexVersion()).toBeNull()
+
+    store.setIndexVersion(FILE_INDEX_VERSION)
+    expect(store.getIndexVersion()).toBe(FILE_INDEX_VERSION)
+
+    db.prepare(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'
+    ).run(INDEX_VERSION_KEY, 'broken')
+    expect(store.getIndexVersion()).toBeNull()
   })
 })
 

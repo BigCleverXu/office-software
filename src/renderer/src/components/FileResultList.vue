@@ -9,6 +9,7 @@ import {
   FileCode,
   FileText,
   FileVideo,
+  Folder,
   FolderOpen,
   Image
 } from 'lucide-vue-next'
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 
 /** 文件类型对应的图标 */
 const KIND_ICONS: Record<FileKind, Component> = {
+  folder: Folder,
   image: Image,
   document: FileText,
   video: FileVideo,
@@ -57,7 +59,7 @@ const rows = computed<ResultRow[]>(() =>
     entry,
     icon: KIND_ICONS[entry.kind] ?? File,
     segments: splitHighlight(entry.name, props.keyword),
-    sizeLabel: formatBytes(entry.size),
+    sizeLabel: entry.kind === 'folder' ? '—' : formatBytes(entry.size),
     modifiedLabel: formatModifiedAt(entry.modifiedAt)
   }))
 )

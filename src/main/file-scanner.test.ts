@@ -60,7 +60,7 @@ async function createFile(
 }
 
 describe('scanRoots 递归扫描', () => {
-  it('递归扫描嵌套目录，文件数与 rootCounts 正确', async () => {
+  it('递归扫描嵌套目录，文件与文件夹数与 rootCounts 正确', async () => {
     await createFile('a.txt')
     await createFile('docs/b.md')
     await createFile('docs/deep/c.png')
@@ -68,10 +68,18 @@ describe('scanRoots 递归扫描', () => {
 
     const capture = await runScan({ roots: [root] })
 
-    expect(capture.summary.scanned).toBe(4)
-    expect(capture.summary.rootCounts[root]).toBe(4)
+    // 4 个文件 + docs、deep 两个文件夹
+    expect(capture.summary.scanned).toBe(6)
+    expect(capture.summary.rootCounts[root]).toBe(6)
     const names = capture.entries.map((entry) => entry.name).sort()
-    expect(names).toEqual(['a.txt', 'b.md', 'c.png', '中文 文件.txt'])
+    expect(names).toEqual([
+      'a.txt',
+      'b.md',
+      'c.png',
+      'deep',
+      'docs',
+      '中文 文件.txt'
+    ])
 
     const png = capture.entries.find((entry) => entry.name === 'c.png')
     expect(png).toBeDefined()
@@ -83,6 +91,46 @@ describe('scanRoots 递归扫描', () => {
     })
     expect(png?.size).toBeGreaterThan(0)
     expect(png?.modifiedAt).toBeGreaterThan(0)
+  })
+
+  it('把文件夹写入索引，隐藏目录与跳过目录不出现', async () => {
+    await createFile('docs/deep/a.txt')
+    await createFile('.hidden/secret.txt')
+    await createFile('node_modules/pkg/index.js')
+    await createFile('.git/config')
+
+    const capture = await runScan({ roots: [root] })
+
+    const folders = capture.entries.filter((entry) => entry.kind === 'folder')
+    expect(folders.map((entry) => entry.name).sort()).toEqual(['deep', 'docs'])
+    const docs = capture.entries.find((entry) => entry.name === 'docs')
+    const deep = capture.entries.find((entry) => entry.name === 'deep')
+    expect(docs).toMatchObject({
+      path: join(root, 'docs'),
+      dir: root,
+      extension: '',
+      size: 0
+    })
+    expect(deep).toMatchObject({
+      path: join(root, 'docs', 'deep'),
+      dir: join(root, 'docs'),
+      extension: '',
+      size: 0
+    })
+    for (const folder of folders) {
+      expect(folder.modifiedAt).toBeGreaterThan(0)
+    }
+
+    // 隐藏目录与跳过目录既不索引也不递归
+    const names = capture.entries.map((entry) => entry.name)
+    expect(names).not.toContain('.hidden')
+    expect(names).not.toContain('node_modules')
+    expect(names).not.toContain('.git')
+    expect(names).not.toContain('secret.txt')
+    expect(names).not.toContain('index.js')
+    expect(names).not.toContain('config')
+    // 搜索根目录自身不写入索引
+    expect(capture.entries.some((entry) => entry.path === root)).toBe(false)
   })
 
   it('跳过 node_modules、版本控制目录与隐藏目录', async () => {
@@ -113,7 +161,7 @@ describe('scanRoots 递归扫描', () => {
     }
 
     const capture = await runScan({ roots: [root] })
-    expect(capture.summary.scanned).toBe(2)
+    expect(capture.summary.scanned).toBe(4)
     expect(capture.entries.some((entry) => entry.path.includes('link-'))).toBe(
       false
     )
@@ -139,12 +187,23 @@ describe('scanRoots 回调', () => {
 
     const capture = await runScan({ roots: [root], batchSize: 2 })
 
-    expect(capture.entries).toHaveLength(5)
-    expect(capture.batches.map((batch) => batch.size)).toEqual([2, 2, 1])
+    // docs 文件夹 + 5 个文件
+    expect(capture.entries).toHaveLength(6)
+    expect(capture.batches.map((batch) => batch.size)).toEqual([2, 2, 2])
     for (const batch of capture.batches) {
       expect(batch.root).toBe(root)
     }
-    for (const entry of capture.entries) {
+    const folder = capture.entries.find((entry) => entry.kind === 'folder')
+    expect(folder).toMatchObject({
+      path: join(root, 'docs'),
+      name: 'docs',
+      dir: root,
+      extension: '',
+      size: 0
+    })
+    const files = capture.entries.filter((entry) => entry.kind !== 'folder')
+    expect(files).toHaveLength(5)
+    for (const entry of files) {
       expect(entry.path.startsWith(root)).toBe(true)
       expect(entry.dir).toBe(join(root, 'docs'))
       expect(entry.extension).toBe('txt')
@@ -160,7 +219,7 @@ describe('scanRoots 回调', () => {
 
     expect(capture.progress.length).toBeGreaterThan(0)
     const last = capture.progress[capture.progress.length - 1]
-    expect(last).toEqual({ scanned: 2, currentDir: '', done: true })
+    expect(last).toEqual({ scanned: 3, currentDir: '', done: true })
     const beforeDone = capture.progress.slice(0, -1)
     expect(beforeDone.every((item) => item.done === false)).toBe(true)
   })
@@ -187,7 +246,8 @@ describe('scanRoots 取消', () => {
     })
 
     expect(summary.scanned).toBeGreaterThan(0)
-    expect(summary.scanned).toBeLessThanOrEqual(10)
+    // docs 文件夹 + 10 个文件
+    expect(summary.scanned).toBeLessThanOrEqual(11)
     expect(scannedAtAbort).toBeGreaterThan(0)
   })
 

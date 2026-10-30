@@ -81,6 +81,7 @@ describe('fileExtensionOf', () => {
 describe('常量', () => {
   it('FILE_KINDS 顺序固定', () => {
     expect(FILE_KINDS).toEqual([
+      'folder',
       'image',
       'document',
       'video',
@@ -96,6 +97,7 @@ describe('常量', () => {
       expect(FILE_KIND_LABELS[kind]).toBeTruthy()
     }
     expect(FILE_KIND_LABELS.image).toBe('图片')
+    expect(FILE_KIND_LABELS.folder).toBe('文件夹')
     expect(FILE_KIND_LABELS.archive).toBe('压缩包')
     expect(ALL_KIND_LABEL).toBe('全部')
   })

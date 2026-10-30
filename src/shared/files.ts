@@ -3,10 +3,18 @@
 
 /** 文件类型 */
 export type FileKind =
-  'image' | 'document' | 'video' | 'audio' | 'archive' | 'code' | 'other'
+  | 'folder'
+  | 'image'
+  | 'document'
+  | 'video'
+  | 'audio'
+  | 'archive'
+  | 'code'
+  | 'other'
 
 /** 全部文件类型，顺序即类型筛选标签展示顺序 */
 export const FILE_KINDS: readonly FileKind[] = [
+  'folder',
   'image',
   'document',
   'video',
@@ -18,6 +26,7 @@ export const FILE_KINDS: readonly FileKind[] = [
 
 /** 类型中文名 */
 export const FILE_KIND_LABELS: Record<FileKind, string> = {
+  folder: '文件夹',
   image: '图片',
   document: '文档',
   video: '视频',

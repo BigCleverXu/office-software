@@ -83,8 +83,30 @@ async function readFileEntry(
   }
 }
 
+/** 读取单个目录的索引信息；stat 失败时返回 null（仍可继续递归） */
+async function readFolderEntry(
+  name: string,
+  fullPath: string,
+  dirPath: string
+): Promise<FileEntry | null> {
+  try {
+    const stats = await fs.stat(fullPath)
+    return {
+      path: fullPath,
+      name,
+      dir: dirPath,
+      extension: '',
+      kind: 'folder',
+      size: 0,
+      modifiedAt: Math.round(stats.mtimeMs)
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
- * 递归扫描配置的搜索目录，只索引普通文件。
+ * 递归扫描配置的搜索目录，索引普通文件与子目录（不含根目录自身）。
  *
  * 使用 opendir 流式遍历，跳过隐藏目录、版本控制目录与符号链接；
  * 目录 / 文件读取失败时跳过不抛出；支持 AbortSignal 提前结束。
@@ -152,6 +174,11 @@ export async function scanRoots(
         const fullPath = join(dirPath, dirent.name)
         if (dirent.isDirectory()) {
           if (!isSkippedDir(dirent.name)) {
+            const entry = await readFolderEntry(dirent.name, fullPath, dirPath)
+            if (entry) {
+              append(root, entry)
+            }
+            // stat 失败时不写入索引，但仍尝试递归其子目录
             await scanDir(root, fullPath)
           }
           continue

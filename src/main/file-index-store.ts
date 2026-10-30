@@ -16,6 +16,12 @@ const ROOTS_KEY = 'file_search_roots'
 /** settings 表中保存上次扫描完成时间的键名 */
 const INDEXED_AT_KEY = 'file_search_indexed_at'
 
+/** settings 表中保存索引版本号的键名 */
+const INDEX_VERSION_KEY = 'file_search_index_version'
+
+/** 索引版本号：扫描逻辑变化需重建全量索引时递增 */
+export const FILE_INDEX_VERSION = 1
+
 /** file_index 表行结构 */
 interface FileIndexRow {
   path: string
@@ -210,6 +216,28 @@ export class FileIndexStore {
       return
     }
     this.writeSetting(INDEXED_AT_KEY, JSON.stringify(value))
+  }
+
+  /** 索引版本号，从未写入或数据损坏时返回 null */
+  getIndexVersion(): number | null {
+    const row = this.db
+      .prepare('SELECT value FROM settings WHERE key = ?')
+      .get(INDEX_VERSION_KEY) as unknown as SettingRow | undefined
+    if (!row) {
+      return null
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(row.value)
+    } catch {
+      return null
+    }
+    return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : null
+  }
+
+  /** 写入索引版本号 */
+  setIndexVersion(value: number): void {
+    this.writeSetting(INDEX_VERSION_KEY, JSON.stringify(value))
   }
 
   /**

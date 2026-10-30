@@ -99,6 +99,10 @@ const overlayOpen = computed<boolean>(
 )
 
 const handlePreview = (entry: FileEntry): void => {
+  if (entry.kind === 'folder') {
+    void handleOpen(entry)
+    return
+  }
   previewPath.value = entry.path
   previewOpen.value = true
 }
@@ -182,8 +186,8 @@ onMounted(() => {
             ref="searchInput"
             v-model="keyword"
             class="pl-8"
-            placeholder="搜索文件名…"
-            aria-label="搜索文件名"
+            placeholder="搜索文件或文件夹…"
+            aria-label="搜索文件或文件夹名称"
           />
         </div>
 
@@ -212,7 +216,7 @@ onMounted(() => {
         <p class="text-muted-foreground text-sm">
           共索引
           <span class="text-foreground font-medium">{{ indexedLabel }}</span>
-          个文件 · 上次扫描 {{ lastScanLabel }} ·
+          个文件与文件夹 · 上次扫描 {{ lastScanLabel }} ·
           {{ state.roots.length }} 个目录
         </p>
 
@@ -284,7 +288,9 @@ onMounted(() => {
         <template v-else-if="hasKeyword">
           <span class="empty-state-icon"><SearchX class="size-6" /></span>
           <div class="flex flex-col gap-1">
-            <p class="text-foreground text-sm font-semibold">没有匹配的文件</p>
+            <p class="text-foreground text-sm font-semibold">
+              没有匹配的文件或文件夹
+            </p>
             <p class="text-sm">换个关键词试试</p>
           </div>
         </template>
@@ -293,9 +299,11 @@ onMounted(() => {
           <span class="empty-state-icon"><FolderSearch class="size-6" /></span>
           <div class="flex flex-col gap-1">
             <p class="text-foreground text-sm font-semibold">
-              输入文件名开始搜索
+              输入文件名或文件夹名开始搜索
             </p>
-            <p class="text-sm">支持按类型筛选，Enter 预览，Ctrl+Enter 打开</p>
+            <p class="text-sm">
+              支持按类型筛选，Enter 预览或打开文件夹，Ctrl+Enter 打开
+            </p>
           </div>
         </template>
       </div>
