@@ -16,7 +16,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS notes (
   title      TEXT NOT NULL DEFAULT '',
   content    TEXT NOT NULL DEFAULT '',
   color      TEXT NOT NULL DEFAULT 'default',
+  category   TEXT NOT NULL DEFAULT '',
   pinned     INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -147,6 +148,7 @@ interface NoteRow {
   title: string
   content: string
   color: string
+  category: string
   pinned: number
   created_at: number
   updated_at: number
@@ -199,7 +201,7 @@ function readUserVersion(db: DatabaseSync): number {
  * 按 PRAGMA user_version 逐版本升级表结构：
  * v0 全新建库建全部表；v1 先补 notes 表；随后在 v3 之前补
  * countdowns / holiday_cache 表；v4 之前补 file_index 表及其索引；
- * 已是最新版本则直接返回。
+ * v5 之前为 notes 补 category 列；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -222,6 +224,11 @@ function applySchema(db: DatabaseSync): void {
     if (version < 4) {
       // v1 / v2 / v3 -> v4：新增文件索引表；v0 时重复执行也安全
       db.exec(FILE_INDEX_TABLE_SQL)
+    }
+    if (version >= 2 && version < 5) {
+      // v2 / v3 / v4 -> v5：notes 表已存在，补 category 列；
+      // v0 / v1 建表语句已含该列，不能执行 ALTER 以免重复列报错
+      db.exec("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT ''")
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Pencil, Pin, PinOff, Trash2 } from 'lucide-vue-next'
+import { Check, Pencil, Pin, PinOff, Tag, Trash2 } from 'lucide-vue-next'
 import type { Note, NoteColor } from '@shared/notes'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,13 +8,24 @@ import {
   TooltipContent,
   TooltipTrigger
 } from '@/components/ui/tooltip'
+import NoteCategoryPicker from '@/components/NoteCategoryPicker.vue'
 
-const props = defineProps<{ note: Note }>()
+const props = withDefaults(
+  defineProps<{
+    note: Note
+    categories?: string[]
+    selectable?: boolean
+    selected?: boolean
+  }>(),
+  { categories: () => [], selectable: false, selected: false }
+)
 
 const emit = defineEmits<{
   edit: []
   remove: []
   'toggle-pin': []
+  'change-category': [category: string]
+  'toggle-select': []
 }>()
 
 /** 便签颜色对应的卡片边框与背景（显式列出，避免动态拼接类名） */
@@ -37,7 +48,26 @@ const COLOR_DOT_STYLES: Record<NoteColor, string> = {
   pink: 'bg-pink-400'
 }
 
-const cardClass = computed(() => COLOR_STYLES[props.note.color])
+const cardClass = computed(() => {
+  const classes: string[] = [COLOR_STYLES[props.note.color]]
+  if (props.selectable) {
+    classes.push('cursor-pointer')
+    if (props.selected) classes.push('ring-2 ring-primary/40')
+  }
+  return classes
+})
+
+/** 选择模式下让整张卡片可点击 / 可键盘操作 */
+const selectionAttrs = computed(() =>
+  props.selectable
+    ? { role: 'button', tabindex: 0, 'aria-pressed': props.selected }
+    : {}
+)
+
+const handleToggleSelect = (): void => {
+  if (!props.selectable) return
+  emit('toggle-select')
+}
 
 const dotClass = computed(() => COLOR_DOT_STYLES[props.note.color])
 
@@ -77,11 +107,28 @@ const updatedAtLabel = computed(() => formatUpdatedAt(props.note.updatedAt))
 
 <template>
   <article
-    class="card-interactive shadow-soft flex h-full flex-col gap-2 rounded-xl border p-3 transition-colors"
+    class="card-interactive shadow-soft group flex h-full flex-col gap-2 rounded-xl border p-3 transition-colors"
     :class="cardClass"
+    v-bind="selectionAttrs"
+    @click="handleToggleSelect"
+    @keydown.enter.prevent="handleToggleSelect"
+    @keydown.space.prevent="handleToggleSelect"
   >
     <header class="flex items-start gap-2">
       <span
+        v-if="selectable"
+        class="mt-1.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors"
+        :class="
+          selected
+            ? 'border-primary bg-primary text-primary-foreground'
+            : 'border-muted-foreground/40'
+        "
+        aria-hidden="true"
+      >
+        <Check v-if="selected" class="size-3" />
+      </span>
+      <span
+        v-else
         class="mt-1.5 size-2 shrink-0 rounded-full"
         :class="dotClass"
         aria-hidden="true"
@@ -96,6 +143,21 @@ const updatedAtLabel = computed(() => formatUpdatedAt(props.note.updatedAt))
       </div>
     </header>
 
+    <NoteCategoryPicker
+      v-if="!selectable"
+      :category="note.category"
+      :categories="categories"
+      @change="emit('change-category', $event)"
+    />
+
+    <span
+      v-else-if="note.category.trim() !== ''"
+      class="inline-flex w-fit items-center gap-1 self-start rounded-full bg-foreground/5 px-2 py-0.5 text-[11px] leading-none"
+    >
+      <Tag class="size-3 shrink-0" aria-hidden="true" />
+      <span class="max-w-32 truncate">{{ note.category.trim() }}</span>
+    </span>
+
     <p
       v-if="hasContent"
       class="line-clamp-3 text-sm break-words whitespace-pre-line opacity-80"
@@ -108,7 +170,7 @@ const updatedAtLabel = computed(() => formatUpdatedAt(props.note.updatedAt))
         更新于 {{ updatedAtLabel }}
       </span>
 
-      <div class="flex items-center gap-0.5">
+      <div v-if="!selectable" class="flex items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger as-child>
             <Button

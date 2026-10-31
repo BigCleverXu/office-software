@@ -8,6 +8,9 @@ interface UseNotes {
   create: (draft: NoteDraft) => Promise<Note>
   update: (id: string, draft: NoteDraft) => Promise<Note | null>
   remove: (id: string) => Promise<void>
+  setCategory: (ids: string[], category: string) => Promise<number>
+  renameCategory: (from: string, to: string) => Promise<number>
+  removeCategory: (name: string) => Promise<number>
 }
 
 /**
@@ -30,6 +33,15 @@ export function useNotes(): UseNotes {
 
   const remove = (id: string): Promise<void> => window.api.notes.remove(id)
 
+  const setCategory = (ids: string[], category: string): Promise<number> =>
+    window.api.notes.setCategory(ids, category)
+
+  const renameCategory = (from: string, to: string): Promise<number> =>
+    window.api.notes.renameCategory(from, to)
+
+  const removeCategory = (name: string): Promise<number> =>
+    window.api.notes.removeCategory(name)
+
   onMounted(async () => {
     await refresh()
     unsubscribe = window.api.notes.onChanged((list) => {
@@ -41,5 +53,14 @@ export function useNotes(): UseNotes {
     unsubscribe?.()
   })
 
-  return { notes, refresh, create, update, remove }
+  return {
+    notes,
+    refresh,
+    create,
+    update,
+    remove,
+    setCategory,
+    renameCategory,
+    removeCategory
+  }
 }

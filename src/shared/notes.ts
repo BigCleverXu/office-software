@@ -12,6 +12,9 @@ export const NOTE_COLORS: readonly NoteColor[] = [
   'pink'
 ]
 
+/** 分类最大字符数 */
+export const NOTE_CATEGORY_MAX_LENGTH = 12
+
 /** 一条便签 */
 export interface Note {
   /** 唯一标识 */
@@ -20,6 +23,8 @@ export interface Note {
   title: string
   /** 正文 */
   content: string
+  /** 分类，空字符串表示未分类 */
+  category: string
   /** 卡片颜色 */
   color: NoteColor
   /** 是否置顶 */
@@ -34,6 +39,8 @@ export interface Note {
 export interface NoteDraft {
   title: string
   content: string
+  /** 分类（可为空） */
+  category: string
   color: NoteColor
   pinned: boolean
 }
@@ -44,6 +51,9 @@ export const NOTE_CHANNELS = {
   create: 'notes:create',
   update: 'notes:update',
   remove: 'notes:delete',
+  setCategory: 'notes:set-category',
+  renameCategory: 'notes:rename-category',
+  removeCategory: 'notes:remove-category',
   changed: 'notes:changed'
 } as const
 
@@ -53,6 +63,12 @@ export interface NoteApi {
   create: (draft: NoteDraft) => Promise<Note>
   update: (id: string, draft: NoteDraft) => Promise<Note | null>
   remove: (id: string) => Promise<void>
+  /** 批量设置指定便签的分类，返回受影响条数 */
+  setCategory: (ids: string[], category: string) => Promise<number>
+  /** 重命名分类，返回受影响条数（目标分类已存在时合并） */
+  renameCategory: (from: string, to: string) => Promise<number>
+  /** 删除分类，便签回落为未分类，返回受影响条数 */
+  removeCategory: (name: string) => Promise<number>
   onChanged: (callback: (notes: Note[]) => void) => () => void
 }
 
@@ -62,4 +78,12 @@ export function isNoteColor(value: unknown): value is NoteColor {
     typeof value === 'string' &&
     (NOTE_COLORS as readonly string[]).includes(value)
   )
+}
+
+/** 规整分类：非字符串回退为空，去首尾空格并截断到上限 */
+export function normalizeNoteCategory(value: unknown): string {
+  if (typeof value !== 'string') {
+    return ''
+  }
+  return value.trim().slice(0, NOTE_CATEGORY_MAX_LENGTH)
 }

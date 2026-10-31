@@ -17,12 +17,16 @@ import { Switch } from '@/components/ui/switch'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = defineProps<{ note?: Note | null }>()
+const props = defineProps<{
+  note?: Note | null
+  categories?: string[]
+}>()
 
 const emit = defineEmits<{ submit: [draft: NoteDraft] }>()
 
 const title = ref('')
 const content = ref('')
+const category = ref('')
 const color = ref<NoteColor>('default')
 const pinned = ref(false)
 
@@ -61,6 +65,7 @@ watch(
     if (!isOpen) return
     title.value = props.note?.title ?? ''
     content.value = props.note?.content ?? ''
+    category.value = props.note?.category ?? ''
     color.value = props.note?.color ?? 'default'
     pinned.value = props.note?.pinned ?? false
   },
@@ -72,6 +77,7 @@ const handleSubmit = (): void => {
   emit('submit', {
     title: title.value.trim(),
     content: content.value,
+    category: category.value.trim(),
     color: color.value,
     pinned: pinned.value
   })
@@ -85,7 +91,7 @@ const handleSubmit = (): void => {
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑便签' : '新建便签' }}</DialogTitle>
         <DialogDescription>
-          随手记下想法，支持置顶与按颜色区分。
+          随手记下想法，支持分类、置顶与按颜色区分。
         </DialogDescription>
       </DialogHeader>
 
@@ -109,6 +115,44 @@ const handleSubmit = (): void => {
             placeholder="写点什么…"
             class="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 placeholder:text-muted-foreground min-h-28 w-full min-w-0 resize-y rounded-lg border bg-transparent px-2.5 py-2 text-base outline-none transition-colors focus-visible:ring-3 md:text-sm"
           />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <Label for="note-category">分类（可选）</Label>
+          <Input
+            id="note-category"
+            v-model="category"
+            maxlength="12"
+            placeholder="选填，最多 12 个字"
+          />
+          <div
+            v-if="(categories?.length ?? 0) > 0 || category"
+            class="flex flex-wrap items-center gap-1.5"
+          >
+            <button
+              v-for="name in categories ?? []"
+              :key="name"
+              type="button"
+              class="rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+              :class="
+                category === name
+                  ? 'border-primary/60 bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+              "
+              :aria-pressed="category === name"
+              @click="category = name"
+            >
+              {{ name }}
+            </button>
+            <button
+              v-if="category"
+              type="button"
+              class="border-border text-muted-foreground hover:bg-muted hover:text-foreground rounded-full border px-2.5 py-0.5 text-xs transition-colors"
+              @click="category = ''"
+            >
+              不分类
+            </button>
+          </div>
         </div>
 
         <div class="flex flex-col gap-2">

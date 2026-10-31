@@ -82,7 +82,7 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后全部表存在且版本号为 4', () => {
+  it(':memory: 打开后全部表存在且版本号为 5', () => {
     const db = openTestDatabase({ path: ':memory:' })
     expect(tableNames(db)).toEqual([
       'alarms',
@@ -94,7 +94,7 @@ describe('openDatabase 建库', () => {
       'watchlist'
     ])
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(4)
+    expect(SCHEMA_VERSION).toBe(5)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
@@ -120,7 +120,7 @@ describe('openDatabase 建库', () => {
 })
 
 describe('openDatabase 版本升级', () => {
-  it('v1 数据库升级到 v4 时新增 notes、日历与文件索引表且保留原有数据', () => {
+  it('v1 数据库升级到 v5 时新增 notes、日历与文件索引表且保留原有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -179,12 +179,12 @@ CREATE TABLE settings (
       'settings',
       'watchlist'
     ])
-    expect(userVersion(db)).toBe(4)
+    expect(userVersion(db)).toBe(5)
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'watchlist')).toBe(1)
   })
 
-  it('v2 数据库升级到 v4 时新增日历表且保留 notes / alarms 数据', () => {
+  it('v2 数据库升级到 v5 时新增日历表且保留 notes / alarms 数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -244,7 +244,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(4)
+    expect(userVersion(db)).toBe(5)
     expect(tableNames(db)).toEqual([
       'alarms',
       'countdowns',
@@ -278,7 +278,7 @@ CREATE TABLE notes (
     })
   })
 
-  it('v3 数据库升级到 v4 时新增 file_index 表且保留既有数据', () => {
+  it('v3 数据库升级到 v5 时新增 file_index 表与 category 列且保留既有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -314,6 +314,15 @@ CREATE TABLE holiday_cache (
   payload    TEXT NOT NULL,
   fetched_at INTEGER NOT NULL
 );
+CREATE TABLE notes (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'default',
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `)
     legacy
       .prepare(
@@ -333,11 +342,53 @@ CREATE TABLE holiday_cache (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(4)
+    expect(userVersion(db)).toBe(5)
     expect(tableNames(db)).toContain('file_index')
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'countdowns')).toBe(1)
     expect(countRows(db, 'file_index')).toBe(0)
+  })
+
+  it('v4 数据库升级到 v5 时为 notes 增加 category 且保留便签数据', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v4 数据库（仅 notes 表，列结构与 v4 一致）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE notes (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'default',
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO notes (
+          id, title, content, color, pinned, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('n1', '旧便签', '内容', 'green', 1, 300, 300)
+    legacy.exec('PRAGMA user_version = 4')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    const columns = db.prepare('PRAGMA table_info(notes)').all() as unknown as {
+      name: string
+    }[]
+    expect(columns.map((column) => column.name)).toContain('category')
+    expect(userVersion(db)).toBe(5)
+
+    const note = db
+      .prepare('SELECT title, category FROM notes WHERE id = ?')
+      .get('n1') as unknown as { title: string; category: string }
+    expect(note.title).toBe('旧便签')
+    expect(note.category).toBe('')
   })
 })
 

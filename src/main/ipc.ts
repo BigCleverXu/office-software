@@ -167,6 +167,43 @@ export function registerNotesIpc(deps: NotesIpcDeps): void {
       broadcast()
     }
   )
+
+  ipcMain.handle(
+    NOTE_CHANNELS.setCategory,
+    (
+      _event: Electron.IpcMainInvokeEvent,
+      ids: string[],
+      category: string
+    ): number => {
+      const affected = store.setCategory(ids, category)
+      if (affected > 0) {
+        broadcast()
+      }
+      return affected
+    }
+  )
+
+  ipcMain.handle(
+    NOTE_CHANNELS.renameCategory,
+    (_event: Electron.IpcMainInvokeEvent, from: string, to: string): number => {
+      const affected = store.renameCategory(from, to)
+      if (affected > 0) {
+        broadcast()
+      }
+      return affected
+    }
+  )
+
+  ipcMain.handle(
+    NOTE_CHANNELS.removeCategory,
+    (_event: Electron.IpcMainInvokeEvent, name: string): number => {
+      const affected = store.removeCategory(name)
+      if (affected > 0) {
+        broadcast()
+      }
+      return affected
+    }
+  )
 }
 
 export interface NewsIpcDeps {

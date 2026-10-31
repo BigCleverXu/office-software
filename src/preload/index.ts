@@ -182,6 +182,12 @@ const notes: NoteApi = {
   update: (id: string, draft: NoteDraft) =>
     ipcRenderer.invoke(NOTE_CHANNELS.update, id, draft),
   remove: (id: string) => ipcRenderer.invoke(NOTE_CHANNELS.remove, id),
+  setCategory: (ids: string[], category: string): Promise<number> =>
+    ipcRenderer.invoke(NOTE_CHANNELS.setCategory, ids, category),
+  renameCategory: (from: string, to: string): Promise<number> =>
+    ipcRenderer.invoke(NOTE_CHANNELS.renameCategory, from, to),
+  removeCategory: (name: string): Promise<number> =>
+    ipcRenderer.invoke(NOTE_CHANNELS.removeCategory, name),
   onChanged: (callback: (notes: Note[]) => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
