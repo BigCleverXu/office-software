@@ -9,6 +9,7 @@ export type AppModuleId =
   | 'news'
   | 'notes'
   | 'files'
+  | 'sites'
   | 'games'
 
 /** 全部合法模块标识，顺序即侧边栏展示顺序 */
@@ -20,6 +21,7 @@ export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'news',
   'notes',
   'files',
+  'sites',
   'games'
 ]
 

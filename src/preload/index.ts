@@ -69,6 +69,20 @@ import {
   type FileSearchResult,
   type FileSearchState
 } from '../shared/files'
+import {
+  QUICK_SITE_CHANNELS,
+  QUICK_SITE_GROUP_CHANNELS,
+  type BrowserScanResult,
+  type OpenQuickSiteGroupResult,
+  type OpenQuickSiteResult,
+  type QuickSite,
+  type QuickSiteApi,
+  type QuickSiteDraft,
+  type QuickSiteGroup,
+  type QuickSiteGroupDraft,
+  type QuickSiteGroupSaveResult,
+  type QuickSiteSaveResult
+} from '../shared/quick-sites'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -368,6 +382,61 @@ const files: FileSearchApi = {
   }
 }
 
+// 暴露给渲染进程的快捷网站 API
+const quickSites: QuickSiteApi = {
+  list: (): Promise<QuickSite[]> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.list),
+  create: (draft: QuickSiteDraft): Promise<QuickSiteSaveResult> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.create, draft),
+  update: (id: string, draft: QuickSiteDraft): Promise<QuickSiteSaveResult> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.update, id, draft),
+  remove: (id: string): Promise<void> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.remove, id),
+  open: (id: string): Promise<OpenQuickSiteResult> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.open, id),
+  listBrowsers: (): Promise<BrowserScanResult> =>
+    ipcRenderer.invoke(QUICK_SITE_CHANNELS.listBrowsers),
+  onChanged: (callback: (sites: QuickSite[]) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: QuickSite[]
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(QUICK_SITE_CHANNELS.changed, listener)
+    return () => {
+      ipcRenderer.removeListener(QUICK_SITE_CHANNELS.changed, listener)
+    }
+  },
+  listGroups: (): Promise<QuickSiteGroup[]> =>
+    ipcRenderer.invoke(QUICK_SITE_GROUP_CHANNELS.list),
+  createGroup: (
+    draft: QuickSiteGroupDraft
+  ): Promise<QuickSiteGroupSaveResult> =>
+    ipcRenderer.invoke(QUICK_SITE_GROUP_CHANNELS.create, draft),
+  updateGroup: (
+    id: string,
+    draft: QuickSiteGroupDraft
+  ): Promise<QuickSiteGroupSaveResult> =>
+    ipcRenderer.invoke(QUICK_SITE_GROUP_CHANNELS.update, id, draft),
+  removeGroup: (id: string): Promise<void> =>
+    ipcRenderer.invoke(QUICK_SITE_GROUP_CHANNELS.remove, id),
+  openGroup: (id: string): Promise<OpenQuickSiteGroupResult> =>
+    ipcRenderer.invoke(QUICK_SITE_GROUP_CHANNELS.open, id),
+  onGroupsChanged: (callback: (groups: QuickSiteGroup[]) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: QuickSiteGroup[]
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(QUICK_SITE_GROUP_CHANNELS.changed, listener)
+    return () => {
+      ipcRenderer.removeListener(QUICK_SITE_GROUP_CHANNELS.changed, listener)
+    }
+  }
+}
+
 const api = {
   alarms,
   market,
@@ -377,7 +446,8 @@ const api = {
   settings,
   news,
   weather,
-  files
+  files,
+  quickSites
 }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API

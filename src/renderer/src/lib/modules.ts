@@ -7,6 +7,7 @@ import {
   CloudSun,
   FolderSearch,
   Gamepad2,
+  Globe,
   LineChart,
   Newspaper,
   StickyNote
@@ -19,6 +20,7 @@ import GamesPanel from '@/components/GamesPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
+import QuickSitePanel from '@/components/QuickSitePanel.vue'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
@@ -85,6 +87,13 @@ export const MODULES: ModuleMeta[] = [
     description: '本地文件极速搜索，按类型筛选与预览',
     icon: FolderSearch,
     component: FileSearchPanel
+  },
+  {
+    id: 'sites',
+    label: '网站',
+    description: '常用网站一键直达，可指定浏览器与角色',
+    icon: Globe,
+    component: QuickSitePanel
   },
   {
     id: 'games',

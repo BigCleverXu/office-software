@@ -22,6 +22,8 @@ import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { NoteStore } from './note-store'
+import { QuickSiteStore } from './quick-site-store'
+import { QuickSiteGroupStore } from './quick-site-group-store'
 import { NewsStore } from './news-store'
 import { WeatherStore } from './weather-store'
 import { WeatherService } from './weather-service'
@@ -37,6 +39,8 @@ import {
   registerMarketIpc,
   registerNewsIpc,
   registerNotesIpc,
+  registerQuickSiteGroupIpc,
+  registerQuickSiteIpc,
   registerSettingsIpc,
   registerUpdateIpc,
   registerWeatherIpc
@@ -325,6 +329,16 @@ app.whenReady().then(() => {
 
   const noteStore = new NoteStore(db)
   registerNotesIpc({ store: noteStore, getWindow: () => mainWindow })
+
+  const quickSiteStore = new QuickSiteStore(db)
+  registerQuickSiteIpc({ store: quickSiteStore, getWindow: () => mainWindow })
+
+  const quickSiteGroupStore = new QuickSiteGroupStore(db)
+  registerQuickSiteGroupIpc({
+    groupStore: quickSiteGroupStore,
+    siteStore: quickSiteStore,
+    getWindow: () => mainWindow
+  })
 
   const newsStore = new NewsStore(db)
   registerNewsIpc({ store: newsStore, getWindow: () => mainWindow })

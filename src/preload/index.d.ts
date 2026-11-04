@@ -8,6 +8,7 @@ import type { CalendarApi } from '../shared/calendar'
 import type { NewsApi } from '../shared/news'
 import type { WeatherApi } from '../shared/weather'
 import type { FileSearchApi } from '../shared/files'
+import type { QuickSiteApi } from '../shared/quick-sites'
 
 declare global {
   interface Window {
@@ -22,6 +23,7 @@ declare global {
       news: NewsApi
       weather: WeatherApi
       files: FileSearchApi
+      quickSites: QuickSiteApi
     }
   }
 }

@@ -16,7 +16,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 7
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -79,6 +79,34 @@ CREATE INDEX IF NOT EXISTS idx_file_index_kind ON file_index(kind);
 CREATE INDEX IF NOT EXISTS idx_file_index_root ON file_index(root);
 `
 
+/** quick_sites 表与索引建表语句（v6 新增，也用于旧版本升级） */
+const QUICK_SITES_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS quick_sites (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL,
+  browser_id TEXT NOT NULL DEFAULT 'system',
+  profile_id TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quick_sites_sort ON quick_sites(sort_order);
+`
+
+/** quick_site_groups 表与索引建表语句（v7 新增，也用于旧版本升级） */
+const QUICK_SITE_GROUPS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS quick_site_groups (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  site_ids   TEXT NOT NULL DEFAULT '[]',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quick_site_groups_sort ON quick_site_groups(sort_order);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -109,7 +137,8 @@ CREATE TABLE IF NOT EXISTS settings (
 ${NOTES_TABLE_SQL}
 ${COUNTDOWNS_TABLE_SQL}
 ${HOLIDAY_CACHE_TABLE_SQL}
-${FILE_INDEX_TABLE_SQL}`
+${FILE_INDEX_TABLE_SQL}
+${QUICK_SITES_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -170,6 +199,28 @@ interface HolidayCacheRow {
   fetched_at: number
 }
 
+/** quick_sites 表行结构 */
+export interface QuickSiteRow {
+  id: string
+  name: string
+  url: string
+  browser_id: string
+  profile_id: string
+  sort_order: number
+  created_at: number
+  updated_at: number
+}
+
+/** quick_site_groups 表行结构 */
+export interface QuickSiteGroupRow {
+  id: string
+  name: string
+  site_ids: string
+  sort_order: number
+  created_at: number
+  updated_at: number
+}
+
 /** PRAGMA user_version 结果 */
 interface UserVersionRow {
   user_version: number
@@ -201,7 +252,8 @@ function readUserVersion(db: DatabaseSync): number {
  * 按 PRAGMA user_version 逐版本升级表结构：
  * v0 全新建库建全部表；v1 先补 notes 表；随后在 v3 之前补
  * countdowns / holiday_cache 表；v4 之前补 file_index 表及其索引；
- * v5 之前为 notes 补 category 列；已是最新版本则直接返回。
+ * v5 之前为 notes 补 category 列；v6 之前补 quick_sites 表；
+ * v7 之前补 quick_site_groups 表；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -229,6 +281,14 @@ function applySchema(db: DatabaseSync): void {
       // v2 / v3 / v4 -> v5：notes 表已存在，补 category 列；
       // v0 / v1 建表语句已含该列，不能执行 ALTER 以免重复列报错
       db.exec("ALTER TABLE notes ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+    }
+    if (version < 6) {
+      // v1–v5 -> v6：新增快捷网站表；v0 时重复执行 IF NOT EXISTS 也安全
+      db.exec(QUICK_SITES_TABLE_SQL)
+    }
+    if (version < 7) {
+      // v1–v6 -> v7：新增快捷网站编组表；v0 时重复执行 IF NOT EXISTS 也安全
+      db.exec(QUICK_SITE_GROUPS_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')

@@ -82,7 +82,7 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后全部表存在且版本号为 5', () => {
+  it(':memory: 打开后全部表存在且版本号为 7', () => {
     const db = openTestDatabase({ path: ':memory:' })
     expect(tableNames(db)).toEqual([
       'alarms',
@@ -90,11 +90,13 @@ describe('openDatabase 建库', () => {
       'file_index',
       'holiday_cache',
       'notes',
+      'quick_site_groups',
+      'quick_sites',
       'settings',
       'watchlist'
     ])
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(5)
+    expect(SCHEMA_VERSION).toBe(7)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
@@ -106,6 +108,8 @@ describe('openDatabase 建库', () => {
       'file_index',
       'holiday_cache',
       'notes',
+      'quick_site_groups',
+      'quick_sites',
       'settings',
       'watchlist'
     ])
@@ -120,7 +124,7 @@ describe('openDatabase 建库', () => {
 })
 
 describe('openDatabase 版本升级', () => {
-  it('v1 数据库升级到 v5 时新增 notes、日历与文件索引表且保留原有数据', () => {
+  it('v1 数据库升级到 v7 时新增 notes、日历、文件索引与站点表且保留原有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -176,15 +180,17 @@ CREATE TABLE settings (
       'file_index',
       'holiday_cache',
       'notes',
+      'quick_site_groups',
+      'quick_sites',
       'settings',
       'watchlist'
     ])
-    expect(userVersion(db)).toBe(5)
+    expect(userVersion(db)).toBe(7)
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'watchlist')).toBe(1)
   })
 
-  it('v2 数据库升级到 v5 时新增日历表且保留 notes / alarms 数据', () => {
+  it('v2 数据库升级到 v7 时新增日历与站点表且保留 notes / alarms 数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -244,13 +250,15 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(5)
+    expect(userVersion(db)).toBe(7)
     expect(tableNames(db)).toEqual([
       'alarms',
       'countdowns',
       'file_index',
       'holiday_cache',
       'notes',
+      'quick_site_groups',
+      'quick_sites',
       'settings',
       'watchlist'
     ])
@@ -278,7 +286,7 @@ CREATE TABLE notes (
     })
   })
 
-  it('v3 数据库升级到 v5 时新增 file_index 表与 category 列且保留既有数据', () => {
+  it('v3 数据库升级到 v7 时新增 file_index、quick_sites 表与 category 列且保留既有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -342,14 +350,15 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(5)
+    expect(userVersion(db)).toBe(7)
     expect(tableNames(db)).toContain('file_index')
+    expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'countdowns')).toBe(1)
     expect(countRows(db, 'file_index')).toBe(0)
   })
 
-  it('v4 数据库升级到 v5 时为 notes 增加 category 且保留便签数据', () => {
+  it('v4 数据库升级到 v7 时为 notes 增加 category 并新增 quick_sites 表', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -382,13 +391,116 @@ CREATE TABLE notes (
       name: string
     }[]
     expect(columns.map((column) => column.name)).toContain('category')
-    expect(userVersion(db)).toBe(5)
+    expect(userVersion(db)).toBe(7)
+    expect(tableNames(db)).toContain('quick_sites')
 
     const note = db
       .prepare('SELECT title, category FROM notes WHERE id = ?')
       .get('n1') as unknown as { title: string; category: string }
     expect(note.title).toBe('旧便签')
     expect(note.category).toBe('')
+  })
+
+  it('v5 数据库升级到 v7 时新增 quick_sites 表且便签数据保留', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v5 数据库（含 notes 表并插入一条便签）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE notes (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'default',
+  category   TEXT NOT NULL DEFAULT '',
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO notes (
+          id, title, content, color, category, pinned, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('n1', '旧便签', '内容', 'green', '工作', 1, 300, 300)
+    legacy.exec('PRAGMA user_version = 5')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    expect(userVersion(db)).toBe(7)
+    expect(tableNames(db)).toContain('quick_sites')
+    expect(countRows(db, 'quick_sites')).toBe(0)
+    expect(countRows(db, 'notes')).toBe(1)
+    const note = db
+      .prepare('SELECT title, category, pinned FROM notes WHERE id = ?')
+      .get('n1') as unknown as {
+      title: string
+      category: string
+      pinned: number
+    }
+    expect(note).toMatchObject({
+      title: '旧便签',
+      category: '工作',
+      pinned: 1
+    })
+  })
+
+  it('v6 数据库升级到 v7 时新增编组表且重复打开不报错', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v6 数据库（含 notes 与 quick_sites 表）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE notes (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL DEFAULT '',
+  color      TEXT NOT NULL DEFAULT 'default',
+  category   TEXT NOT NULL DEFAULT '',
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE quick_sites (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL,
+  browser_id TEXT NOT NULL DEFAULT 'system',
+  profile_id TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO quick_sites (
+          id, name, url, browser_id, profile_id, sort_order,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('s1', 'GitHub', 'https://github.com/', 'system', '', 0, 100, 100)
+    legacy.exec('PRAGMA user_version = 6')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    expect(userVersion(db)).toBe(7)
+    expect(tableNames(db)).toContain('quick_site_groups')
+    expect(countRows(db, 'quick_site_groups')).toBe(0)
+    expect(countRows(db, 'quick_sites')).toBe(1)
+
+    // 重复打开同一数据库：版本已是最新，迁移不报错且数据不变
+    closeTestDatabase(db)
+    const reopened = openTestDatabase({ path: dbPath })
+    expect(userVersion(reopened)).toBe(7)
+    expect(tableNames(reopened)).toContain('quick_site_groups')
+    expect(countRows(reopened, 'quick_sites')).toBe(1)
   })
 })
 
@@ -622,6 +734,8 @@ describe('openDatabase 迁移幂等与异常数据', () => {
         'file_index',
         'holiday_cache',
         'notes',
+        'quick_site_groups',
+        'quick_sites',
         'settings',
         'watchlist'
       ])
