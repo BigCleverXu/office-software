@@ -22,10 +22,34 @@ function makeDraft(overrides: Partial<QuickSiteDraft> = {}): QuickSiteDraft {
   return {
     name: 'GitHub',
     url: 'github.com',
-    browserId: 'system',
-    profileId: '',
+    targets: [{ browserId: 'system', profileId: '' }],
     ...overrides
   }
+}
+
+/** 读取某行的旧列 */
+function readLegacyColumns(
+  id: string
+): { browser_id: string; profile_id: string } | undefined {
+  return db
+    .prepare('SELECT browser_id, profile_id FROM quick_sites WHERE id = ?')
+    .get(id) as unknown as
+    { browser_id: string; profile_id: string } | undefined
+}
+
+/** 直接写入一行仅含旧列的数据（targets 使用默认空串） */
+function insertLegacyRow(
+  id: string,
+  url: string,
+  browserId: string,
+  profileId: string
+): void {
+  db.prepare(
+    `INSERT INTO quick_sites (
+      id, name, url, browser_id, profile_id, sort_order,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, '', url, browserId, profileId, 0, 1, 1)
 }
 
 describe('QuickSiteStore.create', () => {
@@ -36,8 +60,7 @@ describe('QuickSiteStore.create', () => {
     expect(result.site).toMatchObject({
       name: 'GitHub',
       url: 'https://github.com/',
-      browserId: 'system',
-      profileId: '',
+      targets: [{ browserId: 'system', profileId: '' }],
       sortOrder: 0
     })
     expect(result.site?.id).toBeTruthy()
@@ -65,27 +88,71 @@ describe('QuickSiteStore.create', () => {
     expect(store.getAll()).toEqual([])
   })
 
-  it('非法浏览器 id 回退 system，且 system 清空角色', () => {
+  it('多目标创建后完整往返并去重保持顺序', () => {
     const result = store.create(
       makeDraft({
-        browserId: 'unknown' as QuickSiteDraft['browserId'],
-        profileId: 'Default'
+        targets: [
+          { browserId: 'chrome', profileId: '  P1  ' },
+          { browserId: 'edge', profileId: '' },
+          { browserId: 'chrome', profileId: 'P1' }
+        ]
       })
     )
 
     expect(result.ok).toBe(true)
-    expect(result.site?.browserId).toBe('system')
-    expect(result.site?.profileId).toBe('')
-    expect(store.getAll()[0].profileId).toBe('')
+    expect(result.site?.targets).toEqual([
+      { browserId: 'chrome', profileId: 'P1' },
+      { browserId: 'edge', profileId: '' }
+    ])
+    expect(store.getAll()[0].targets).toEqual(result.site?.targets)
   })
 
-  it('非 system 浏览器保留并规整角色', () => {
+  it('非法浏览器与系统角色在目标中被规整', () => {
     const result = store.create(
-      makeDraft({ browserId: 'chrome', profileId: '  Profile 1  ' })
+      makeDraft({
+        targets: [
+          {
+            browserId: 'unknown' as QuickSiteDraft['targets'][0]['browserId'],
+            profileId: 'P1'
+          },
+          { browserId: 'system', profileId: 'Default' }
+        ]
+      })
     )
 
-    expect(result.site?.profileId).toBe('Profile 1')
-    expect(store.getAll()[0]).toEqual(result.site)
+    expect(result.ok).toBe(true)
+    expect(result.site?.targets).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+    expect(store.getAll()[0].targets).toEqual(result.site?.targets)
+  })
+
+  it('非数组 targets 回退系统默认目标', () => {
+    const result = store.create(
+      makeDraft({
+        targets: null as unknown as QuickSiteDraft['targets']
+      })
+    )
+
+    expect(result.site?.targets).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+  })
+
+  it('写入时同步旧列为首个目标', () => {
+    const result = store.create(
+      makeDraft({
+        targets: [
+          { browserId: 'chrome', profileId: 'P1' },
+          { browserId: 'edge', profileId: 'P2' }
+        ]
+      })
+    )
+
+    expect(readLegacyColumns(result.site?.id ?? '')).toEqual({
+      browser_id: 'chrome',
+      profile_id: 'P1'
+    })
   })
 })
 
@@ -106,41 +173,70 @@ describe('QuickSiteStore.getAll', () => {
     expect(store.getById(first.site?.id ?? '')).not.toBeNull()
   })
 
-  it('脏数据降级：非法浏览器回退 system、system 清空角色', () => {
-    db.prepare(
-      `INSERT INTO quick_sites (
-        id, name, url, browser_id, profile_id, sort_order,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      'dirty',
-      '',
-      'https://www.example.com/',
-      'unknown',
-      'Profile 1',
-      0,
-      1,
-      1
-    )
+  it('旧行 targets 为空时回退旧列生成单个目标', () => {
+    insertLegacyRow('legacy', 'https://example.com/', 'chrome', '  P1  ')
 
     const sites = store.getAll()
 
     expect(sites).toHaveLength(1)
     expect(sites[0]).toMatchObject({
-      id: 'dirty',
+      id: 'legacy',
       name: 'example.com',
-      browserId: 'system',
-      profileId: ''
+      targets: [{ browserId: 'chrome', profileId: 'P1' }]
     })
   })
 
+  it('旧行非法浏览器回退 system 且系统角色清空', () => {
+    insertLegacyRow('dirty', 'https://www.example.com/', 'unknown', 'Profile 1')
+
+    const sites = store.getAll()
+
+    expect(sites).toHaveLength(1)
+    expect(sites[0].targets).toEqual([{ browserId: 'system', profileId: '' }])
+  })
+
+  it('targets JSON 损坏时回退旧列', () => {
+    insertLegacyRow('broken', 'https://example.com/', 'edge', 'P1')
+    db.prepare('UPDATE quick_sites SET targets = ? WHERE id = ?').run(
+      '{',
+      'broken'
+    )
+
+    expect(store.getAll()[0].targets).toEqual([
+      { browserId: 'edge', profileId: 'P1' }
+    ])
+  })
+
+  it('targets 为空数组时回退旧列', () => {
+    insertLegacyRow('empty', 'https://example.com/', 'firefox', '/p1')
+    db.prepare('UPDATE quick_sites SET targets = ? WHERE id = ?').run(
+      '[]',
+      'empty'
+    )
+
+    expect(store.getAll()[0].targets).toEqual([
+      { browserId: 'firefox', profileId: '/p1' }
+    ])
+  })
+
+  it('优先读取 targets JSON，忽略旧列', () => {
+    insertLegacyRow('multi', 'https://example.com/', 'chrome', 'P1')
+    db.prepare('UPDATE quick_sites SET targets = ? WHERE id = ?').run(
+      JSON.stringify([
+        { browserId: 'chrome', profileId: 'P1' },
+        { browserId: 'edge', profileId: 'P2' }
+      ]),
+      'multi'
+    )
+
+    expect(store.getAll()[0].targets).toEqual([
+      { browserId: 'chrome', profileId: 'P1' },
+      { browserId: 'edge', profileId: 'P2' }
+    ])
+  })
+
   it('网址非法的行被过滤，其余行保留', () => {
-    db.prepare(
-      `INSERT INTO quick_sites (
-        id, name, url, browser_id, profile_id, sort_order,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run('bad', '坏数据', 'javascript:alert(1)', 'system', '', 0, 1, 1)
+    insertLegacyRow('bad', 'javascript:alert(1)', 'system', '')
     store.create(makeDraft({ name: '好数据', url: 'example.com' }))
 
     expect(store.getAll().map((site) => site.id)).not.toContain('bad')
@@ -159,8 +255,10 @@ describe('QuickSiteStore.update', () => {
     const result = store.update(created.site?.id ?? '', {
       name: '工作台',
       url: 'https://example.com/path',
-      browserId: 'edge',
-      profileId: 'Personal'
+      targets: [
+        { browserId: 'edge', profileId: 'Personal' },
+        { browserId: 'chrome', profileId: '' }
+      ]
     })
 
     expect(result.ok).toBe(true)
@@ -168,8 +266,10 @@ describe('QuickSiteStore.update', () => {
       id: created.site?.id,
       name: '工作台',
       url: 'https://example.com/path',
-      browserId: 'edge',
-      profileId: 'Personal',
+      targets: [
+        { browserId: 'edge', profileId: 'Personal' },
+        { browserId: 'chrome', profileId: '' }
+      ],
       sortOrder: 0,
       createdAt: 1000,
       updatedAt: 2000
@@ -177,20 +277,35 @@ describe('QuickSiteStore.update', () => {
     expect(store.getAll()[0]).toEqual(result.site)
   })
 
+  it('写入时同步旧列为首个目标', () => {
+    const created = store.create(makeDraft())
+
+    const result = store.update(created.site?.id ?? '', {
+      name: created.site?.name ?? '',
+      url: created.site?.url ?? '',
+      targets: [{ browserId: 'firefox', profileId: '/p1' }]
+    })
+
+    expect(readLegacyColumns(result.site?.id ?? '')).toEqual({
+      browser_id: 'firefox',
+      profile_id: '/p1'
+    })
+  })
+
   it('切换到系统默认浏览器时清空角色', () => {
     const created = store.create(
-      makeDraft({ browserId: 'chrome', profileId: 'Default' })
+      makeDraft({ targets: [{ browserId: 'chrome', profileId: 'Default' }] })
     )
 
     const result = store.update(created.site?.id ?? '', {
       name: created.site?.name ?? '',
       url: created.site?.url ?? '',
-      browserId: 'system',
-      profileId: 'Default'
+      targets: [{ browserId: 'system', profileId: 'Default' }]
     })
 
-    expect(result.site?.browserId).toBe('system')
-    expect(result.site?.profileId).toBe('')
+    expect(result.site?.targets).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
   })
 
   it('站点不存在时返回站点不存在', () => {

@@ -10,7 +10,6 @@ import {
   SearchX
 } from 'lucide-vue-next'
 import type {
-  DetectedBrowser,
   OpenQuickSiteGroupResult,
   QuickSite,
   QuickSiteDraft,
@@ -105,12 +104,18 @@ const handleOpenSite = async (site: QuickSite): Promise<void> => {
   try {
     const result = await open(site.id)
     if (!result.ok) {
-      showToast('error', result.error ?? '打开失败')
-    } else if (result.fallback) {
-      showToast('success', '原浏览器不可用，已使用系统默认浏览器打开')
-    } else {
-      showToast('success', `已用 ${result.browserName ?? '浏览器'} 打开`)
+      showToast('error', result.errors?.[0] ?? '打开失败')
+      return
     }
+    const parts = [`已打开 ${result.opened} 个窗口`]
+    if (result.fallback > 0) {
+      parts.push(`${result.fallback} 个回退到系统默认`)
+    }
+    if (result.failed > 0) {
+      parts.push(`${result.failed} 个打开失败`)
+    }
+    const kind: ToastKind = result.failed > 0 ? 'error' : 'success'
+    showToast(kind, parts.join('，'))
   } catch {
     showToast('error', '打开失败')
   } finally {
@@ -136,7 +141,7 @@ const openingGroupId = ref<string | null>(null)
 const showGroupOpenToast = (result: OpenQuickSiteGroupResult): void => {
   const parts: string[] = []
   if (result.opened > 0) {
-    parts.push(`已打开 ${result.opened} 个网站`)
+    parts.push(`已打开 ${result.opened} 个窗口`)
   }
   if (result.fallback > 0) {
     parts.push(`${result.fallback} 个回退到系统默认`)
@@ -262,16 +267,6 @@ const handleSubmit = async (draft: QuickSiteDraft): Promise<void> => {
 const handleRescan = async (): Promise<void> => {
   await refreshBrowsers()
 }
-
-const browserFor = (site: QuickSite): DetectedBrowser | undefined =>
-  browsers.value.find((browser) => browser.id === site.browserId)
-
-const profileNameFor = (
-  site: QuickSite,
-  browser: DetectedBrowser | undefined
-): string =>
-  browser?.profiles.find((profile) => profile.id === site.profileId)?.name ??
-  (site.profileId ? '未知角色' : '')
 </script>
 
 <template>
@@ -395,8 +390,7 @@ const profileNameFor = (
           v-for="site in filteredSites"
           :key="site.id"
           :site="site"
-          :browser="browserFor(site)"
-          :profile-name="profileNameFor(site, browserFor(site))"
+          :browsers="browsers"
           :opening="openingId === site.id"
           @open="handleOpenSite(site)"
           @edit="openEditDialog(site)"

@@ -65,15 +65,21 @@ export interface BrowserScanResult {
   browsers: DetectedBrowser[]
 }
 
+/** 站点的一种打开方式：浏览器 + 角色 */
+export interface QuickSiteTarget {
+  browserId: BrowserId
+  /** 浏览器角色 id，空字符串表示默认角色 */
+  profileId: string
+}
+
 /** 一个快捷站点 */
 export interface QuickSite {
   id: string
   name: string
   /** 已规整的 http / https 网址 */
   url: string
-  browserId: BrowserId
-  /** 浏览器角色 id，空字符串表示默认角色 */
-  profileId: string
+  /** 打开方式列表，至少包含一项 */
+  targets: QuickSiteTarget[]
   sortOrder: number
   /** 创建时间戳（毫秒） */
   createdAt: number
@@ -85,8 +91,7 @@ export interface QuickSite {
 export interface QuickSiteDraft {
   name: string
   url: string
-  browserId: BrowserId
-  profileId: string
+  targets: QuickSiteTarget[]
 }
 
 /** 保存结果 */
@@ -99,11 +104,16 @@ export interface QuickSiteSaveResult {
 /** 打开站点的结果 */
 export interface OpenQuickSiteResult {
   ok: boolean
-  /** 实际使用的浏览器名称 */
-  browserName?: string
-  /** 是否回退到系统默认浏览器 */
-  fallback?: boolean
-  error?: string
+  /** 成功打开的窗口数 */
+  opened: number
+  /** 回退到系统默认浏览器的目标数 */
+  fallback: number
+  /** 打开失败的目标数 */
+  failed: number
+  /** 实际使用的浏览器名称，去重保序 */
+  browserNames: string[]
+  /** 失败提示，去重 */
+  errors?: string[]
 }
 
 /** 一个快捷网站编组 */
@@ -287,6 +297,64 @@ export function normalizeQuickSiteProfileId(
     return ''
   }
   return value.trim().slice(0, QUICK_SITE_PROFILE_ID_MAX_LENGTH)
+}
+
+/** 生成打开方式的唯一键：`${browserId}:${profileId}` */
+export function targetKeyOf(target: QuickSiteTarget): string {
+  return `${target.browserId}:${target.profileId}`
+}
+
+/**
+ * 规整单个打开方式：非对象返回 null；浏览器标识非法时回退系统默认
+ * 浏览器；角色 id 用 normalizeQuickSiteProfileId 规整（系统默认强制为空串）。
+ */
+export function normalizeQuickSiteTarget(
+  value: unknown
+): QuickSiteTarget | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const record = value as { browserId?: unknown; profileId?: unknown }
+  const browserId = isBrowserId(record.browserId)
+    ? record.browserId
+    : SYSTEM_BROWSER_ID
+  return {
+    browserId,
+    profileId: normalizeQuickSiteProfileId(record.profileId, browserId)
+  }
+}
+
+/** 系统默认打开方式，作为空集合的兜底值 */
+function systemTarget(): QuickSiteTarget {
+  return { browserId: SYSTEM_BROWSER_ID, profileId: '' }
+}
+
+/**
+ * 规整打开方式列表：非数组返回单个系统默认目标；逐项规整、丢弃 null、
+ * 按 browserId + profileId 去重保序；结果为空时同样回退系统默认目标。
+ */
+export function normalizeQuickSiteTargets(value: unknown): QuickSiteTarget[] {
+  if (!Array.isArray(value)) {
+    return [systemTarget()]
+  }
+  const result: QuickSiteTarget[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    const target = normalizeQuickSiteTarget(item)
+    if (target === null) {
+      continue
+    }
+    const key = targetKeyOf(target)
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    result.push(target)
+  }
+  if (result.length === 0) {
+    return [systemTarget()]
+  }
+  return result
 }
 
 /** 规整编组名称：非字符串返回空串，去首尾空格并截断到 20 个字符 */

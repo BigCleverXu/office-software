@@ -5,10 +5,12 @@ import {
   isBrowserId,
   normalizeQuickSiteName,
   normalizeQuickSiteProfileId,
+  normalizeQuickSiteTargets,
   normalizeQuickSiteUrl,
   type QuickSite,
   type QuickSiteDraft,
-  type QuickSiteSaveResult
+  type QuickSiteSaveResult,
+  type QuickSiteTarget
 } from '../shared/quick-sites'
 import type { QuickSiteRow } from './database'
 
@@ -23,21 +25,45 @@ interface SortRow {
   next: number
 }
 
+/** 按旧列 browser_id / profile_id 生成单个目标 */
+function legacyTarget(row: QuickSiteRow): QuickSiteTarget {
+  const browserId = isBrowserId(row.browser_id)
+    ? row.browser_id
+    : SYSTEM_BROWSER_ID
+  return {
+    browserId,
+    profileId: normalizeQuickSiteProfileId(row.profile_id, browserId)
+  }
+}
+
+/**
+ * 解析 targets 列：优先使用合法的非空数组；JSON 损坏、非数组或空数组
+ * 时回退旧列生成单个目标。
+ */
+function parseTargets(row: QuickSiteRow): QuickSiteTarget[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(row.targets)
+  } catch {
+    parsed = null
+  }
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return normalizeQuickSiteTargets(parsed)
+  }
+  return normalizeQuickSiteTargets([legacyTarget(row)])
+}
+
 /** 行转站点：非法网址返回 null（调用方跳过该行） */
 function rowToQuickSite(row: QuickSiteRow): QuickSite | null {
   const url = normalizeQuickSiteUrl(row.url)
   if (url === '') {
     return null
   }
-  const browserId = isBrowserId(row.browser_id)
-    ? row.browser_id
-    : SYSTEM_BROWSER_ID
   return {
     id: row.id,
     name: normalizeQuickSiteName(row.name, url),
     url,
-    browserId,
-    profileId: normalizeQuickSiteProfileId(row.profile_id, browserId),
+    targets: parseTargets(row),
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -49,6 +75,8 @@ function rowToQuickSite(row: QuickSiteRow): QuickSite | null {
  *
  * 数据保存在注入的 SQLite 数据库（`quick_sites` 表）中，由 database.ts
  * 负责建表；本类只做单表读写，并在读写边界统一规整脏数据。
+ * targets 列存打开方式 JSON，旧列 browser_id / profile_id 同步首个目标
+ * 以兼容尚未升级的读取方。
  */
 export class QuickSiteStore {
   private readonly db: DatabaseSync
@@ -95,16 +123,14 @@ export class QuickSiteStore {
     if (url === '') {
       return { ok: false, error: INVALID_URL_ERROR }
     }
-    const browserId = isBrowserId(input.browserId)
-      ? input.browserId
-      : SYSTEM_BROWSER_ID
+    const targets = normalizeQuickSiteTargets(input.targets)
+    const first = targets[0]
     const now = Date.now()
     const site: QuickSite = {
       id: randomUUID(),
       name: normalizeQuickSiteName(input.name, url),
       url,
-      browserId,
-      profileId: normalizeQuickSiteProfileId(input.profileId, browserId),
+      targets,
       sortOrder: this.nextSortOrder(),
       createdAt: now,
       updatedAt: now
@@ -112,16 +138,17 @@ export class QuickSiteStore {
     this.db
       .prepare(
         `INSERT INTO quick_sites (
-          id, name, url, browser_id, profile_id, sort_order,
+          id, name, url, browser_id, profile_id, targets, sort_order,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         site.id,
         site.name,
         site.url,
-        site.browserId,
-        site.profileId,
+        first.browserId,
+        first.profileId,
+        JSON.stringify(site.targets),
         site.sortOrder,
         site.createdAt,
         site.updatedAt
@@ -139,28 +166,28 @@ export class QuickSiteStore {
     if (url === '') {
       return { ok: false, error: INVALID_URL_ERROR }
     }
-    const browserId = isBrowserId(input.browserId)
-      ? input.browserId
-      : SYSTEM_BROWSER_ID
+    const targets = normalizeQuickSiteTargets(input.targets)
+    const first = targets[0]
     const site: QuickSite = {
       ...current,
       name: normalizeQuickSiteName(input.name, url),
       url,
-      browserId,
-      profileId: normalizeQuickSiteProfileId(input.profileId, browserId),
+      targets,
       updatedAt: Date.now()
     }
     this.db
       .prepare(
         `UPDATE quick_sites SET
-          name = ?, url = ?, browser_id = ?, profile_id = ?, updated_at = ?
+          name = ?, url = ?, browser_id = ?, profile_id = ?, targets = ?,
+          updated_at = ?
         WHERE id = ?`
       )
       .run(
         site.name,
         site.url,
-        site.browserId,
-        site.profileId,
+        first.browserId,
+        first.profileId,
+        JSON.stringify(site.targets),
         site.updatedAt,
         id
       )

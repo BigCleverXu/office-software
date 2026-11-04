@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs'
 import {
   SYSTEM_BROWSER_ID,
+  targetKeyOf,
   type DetectedBrowser,
   type OpenQuickSiteGroupResult,
+  type OpenQuickSiteResult,
   type QuickSite,
   type QuickSiteGroup
 } from '../shared/quick-sites'
@@ -18,12 +20,16 @@ export const SYSTEM_FALLBACK_BROWSER: DetectedBrowser = {
   profiles: []
 }
 
-/** 编组打开依赖，可在测试中注入 */
-export interface GroupOpenDeps {
-  siteStore: QuickSiteStore
+/** 站点批量打开依赖，可在测试中注入 */
+export interface SiteOpenDeps {
   detect: () => DetectedBrowser[]
   launchBatch?: typeof openUrlsInBrowser
   exists?: (path: string) => boolean
+}
+
+/** 编组打开依赖，在站点依赖之上额外提供站点存储 */
+export interface GroupOpenDeps extends SiteOpenDeps {
+  siteStore: QuickSiteStore
 }
 
 /** 同一浏览器与角色下待打开的网址 */
@@ -34,36 +40,30 @@ interface BrowserBatch {
 }
 
 /**
- * 按编组批量打开站点。
+ * 按站点的全部打开方式批量打开网址。
  *
- * 逐个读取站点并按「浏览器 + 角色」归并在一次启动中；浏览器缺失或
- * 可执行文件不存在时该站点回退到系统默认浏览器。各批次的成功 / 失败
- * 数量汇总后返回，失败提示去重收集，绝不抛出异常。
+ * 系统目标进入系统批次；其余目标在浏览器存在且可执行文件存在时按
+ * 「浏览器 + 角色」入桶，否则计入 fallback 并改投系统默认批次。
+ * 同一浏览器与角色跨站点、跨目标合并为一次启动；各批次的成功 / 失败
+ * 数量汇总后返回，浏览器名称与失败提示均去重，绝不抛出异常。
  */
-export async function openQuickSiteGroup(
-  group: QuickSiteGroup,
-  deps: GroupOpenDeps
-): Promise<OpenQuickSiteGroupResult> {
-  const launchBatch = deps.launchBatch ?? openUrlsInBrowser
-  const fileExists = deps.exists ?? existsSync
-
-  const sites: QuickSite[] = []
-  for (const id of group.siteIds) {
-    const site = deps.siteStore.getById(id)
-    if (site !== null) {
-      sites.push(site)
-    }
-  }
-  if (sites.length === 0) {
+export async function openSitesInBrowsers(
+  sites: QuickSite[],
+  deps: SiteOpenDeps
+): Promise<OpenQuickSiteResult> {
+  if (sites.every((site) => site.targets.length === 0)) {
     return {
       ok: false,
       opened: 0,
       fallback: 0,
       failed: 0,
-      errors: ['编组内没有可打开的网站']
+      browserNames: [],
+      errors: ['没有可用的打开方式']
     }
   }
 
+  const launchBatch = deps.launchBatch ?? openUrlsInBrowser
+  const fileExists = deps.exists ?? existsSync
   const browsers = deps.detect()
   const systemBrowser =
     browsers.find((browser) => browser.id === SYSTEM_BROWSER_ID) ??
@@ -72,33 +72,45 @@ export async function openQuickSiteGroup(
   const batches = new Map<string, BrowserBatch>()
   let fallback = 0
 
-  for (const site of sites) {
-    let batchBrowser = systemBrowser
-    let profileId = ''
-    let key: string = SYSTEM_BROWSER_ID
-    if (site.browserId !== SYSTEM_BROWSER_ID) {
-      const browser = browsers.find((item) => item.id === site.browserId)
-      if (browser !== undefined && fileExists(browser.executable)) {
-        batchBrowser = browser
-        profileId = site.profileId
-        key = `${browser.id}:${site.profileId}`
-      } else {
-        fallback += 1
-      }
-    }
+  const addUrl = (
+    key: string,
+    browser: DetectedBrowser,
+    profileId: string,
+    url: string
+  ): void => {
     const batch = batches.get(key)
     if (batch !== undefined) {
-      batch.urls.push(site.url)
+      batch.urls.push(url)
     } else {
-      batches.set(key, { browser: batchBrowser, profileId, urls: [site.url] })
+      batches.set(key, { browser, profileId, urls: [url] })
+    }
+  }
+
+  for (const site of sites) {
+    for (const target of site.targets) {
+      if (target.browserId === SYSTEM_BROWSER_ID) {
+        addUrl(SYSTEM_BROWSER_ID, systemBrowser, '', site.url)
+        continue
+      }
+      const browser = browsers.find((item) => item.id === target.browserId)
+      if (browser !== undefined && fileExists(browser.executable)) {
+        addUrl(targetKeyOf(target), browser, target.profileId, site.url)
+      } else {
+        fallback += 1
+        addUrl(SYSTEM_BROWSER_ID, systemBrowser, '', site.url)
+      }
     }
   }
 
   let opened = 0
   let failed = 0
   const errors: string[] = []
+  const browserNames: string[] = []
 
   for (const batch of batches.values()) {
+    if (!browserNames.includes(batch.browser.name)) {
+      browserNames.push(batch.browser.name)
+    }
     const result = await launchBatch(
       batch.browser,
       batch.profileId,
@@ -123,6 +135,49 @@ export async function openQuickSiteGroup(
     opened,
     fallback,
     failed,
+    browserNames,
     ...(errors.length > 0 ? { errors } : {})
+  }
+}
+
+/**
+ * 按编组批量打开站点。
+ *
+ * 解析编组内的有效站点后交给 openSitesInBrowsers；编组为空时返回
+ * 可读错误，不触发浏览器探测。
+ */
+export async function openQuickSiteGroup(
+  group: QuickSiteGroup,
+  deps: GroupOpenDeps
+): Promise<OpenQuickSiteGroupResult> {
+  const sites: QuickSite[] = []
+  for (const id of group.siteIds) {
+    const site = deps.siteStore.getById(id)
+    if (site !== null) {
+      sites.push(site)
+    }
+  }
+  if (sites.length === 0) {
+    return {
+      ok: false,
+      opened: 0,
+      fallback: 0,
+      failed: 0,
+      errors: ['编组内没有可打开的网站']
+    }
+  }
+
+  const result = await openSitesInBrowsers(sites, {
+    detect: deps.detect,
+    launchBatch: deps.launchBatch,
+    exists: deps.exists
+  })
+
+  return {
+    ok: result.ok,
+    opened: result.opened,
+    fallback: result.fallback,
+    failed: result.failed,
+    ...(result.errors?.length ? { errors: result.errors } : {})
   }
 }

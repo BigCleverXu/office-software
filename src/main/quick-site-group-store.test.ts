@@ -25,8 +25,7 @@ function makeSite(name: string, url: string): string {
     siteStore.create({
       name,
       url,
-      browserId: 'system',
-      profileId: ''
+      targets: [{ browserId: 'system', profileId: '' }]
     }).site?.id ?? ''
   )
 }

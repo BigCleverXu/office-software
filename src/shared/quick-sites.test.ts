@@ -10,7 +10,10 @@ import {
   normalizeQuickSiteGroupSiteIds,
   normalizeQuickSiteName,
   normalizeQuickSiteProfileId,
-  normalizeQuickSiteUrl
+  normalizeQuickSiteTarget,
+  normalizeQuickSiteTargets,
+  normalizeQuickSiteUrl,
+  targetKeyOf
 } from './quick-sites'
 
 describe('normalizeQuickSiteUrl', () => {
@@ -132,6 +135,87 @@ describe('normalizeQuickSiteProfileId', () => {
   it('非字符串回退为空字符串', () => {
     expect(normalizeQuickSiteProfileId(123, 'chrome')).toBe('')
     expect(normalizeQuickSiteProfileId(undefined, 'chrome')).toBe('')
+  })
+})
+
+describe('normalizeQuickSiteTarget', () => {
+  it('非法浏览器回退系统默认浏览器并清空角色', () => {
+    expect(
+      normalizeQuickSiteTarget({ browserId: 'unknown', profileId: 'Profile 1' })
+    ).toEqual({ browserId: 'system', profileId: '' })
+    expect(
+      normalizeQuickSiteTarget({ browserId: 42, profileId: null })
+    ).toEqual({ browserId: 'system', profileId: '' })
+  })
+
+  it('合法浏览器保留并规整角色', () => {
+    expect(
+      normalizeQuickSiteTarget({ browserId: 'chrome', profileId: '  P1  ' })
+    ).toEqual({ browserId: 'chrome', profileId: 'P1' })
+  })
+
+  it('非对象返回 null', () => {
+    expect(normalizeQuickSiteTarget(null)).toBeNull()
+    expect(normalizeQuickSiteTarget(undefined)).toBeNull()
+    expect(normalizeQuickSiteTarget('chrome')).toBeNull()
+    expect(normalizeQuickSiteTarget(42)).toBeNull()
+    expect(normalizeQuickSiteTarget(['chrome'])).toBeNull()
+  })
+})
+
+describe('normalizeQuickSiteTargets', () => {
+  it('逐项规整并丢弃非对象项', () => {
+    expect(
+      normalizeQuickSiteTargets([
+        { browserId: 'chrome', profileId: 'P1' },
+        null,
+        'x',
+        { browserId: 'system', profileId: 'ignored' }
+      ])
+    ).toEqual([
+      { browserId: 'chrome', profileId: 'P1' },
+      { browserId: 'system', profileId: '' }
+    ])
+  })
+
+  it('按浏览器 + 角色去重并保持首次出现的顺序', () => {
+    expect(
+      normalizeQuickSiteTargets([
+        { browserId: 'chrome', profileId: 'P1' },
+        { browserId: 'edge', profileId: '' },
+        { browserId: 'chrome', profileId: 'P1' },
+        { browserId: 'system', profileId: 'anything' },
+        { browserId: 'system', profileId: '' }
+      ])
+    ).toEqual([
+      { browserId: 'chrome', profileId: 'P1' },
+      { browserId: 'edge', profileId: '' },
+      { browserId: 'system', profileId: '' }
+    ])
+  })
+
+  it('非数组或空集合回退单个系统默认目标', () => {
+    expect(normalizeQuickSiteTargets(null)).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+    expect(normalizeQuickSiteTargets('chrome')).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+    expect(normalizeQuickSiteTargets([])).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+    expect(normalizeQuickSiteTargets([null, 'x'])).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+  })
+})
+
+describe('targetKeyOf', () => {
+  it('拼接浏览器标识与角色 id', () => {
+    expect(targetKeyOf({ browserId: 'chrome', profileId: 'P1' })).toBe(
+      'chrome:P1'
+    )
+    expect(targetKeyOf({ browserId: 'system', profileId: '' })).toBe('system:')
   })
 })
 

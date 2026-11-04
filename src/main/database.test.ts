@@ -72,6 +72,14 @@ function readSettings(db: DatabaseSync): Record<string, unknown> {
   return result
 }
 
+/** 读取某个站点的 targets 列 */
+function readTargets(db: DatabaseSync, id: string): string {
+  const row = db
+    .prepare('SELECT targets FROM quick_sites WHERE id = ?')
+    .get(id) as unknown as { targets: string }
+  return row.targets
+}
+
 afterEach(() => {
   for (const db of opened.splice(0)) {
     closeDatabase(db)
@@ -82,7 +90,7 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后全部表存在且版本号为 7', () => {
+  it(':memory: 打开后全部表存在且版本号为 8', () => {
     const db = openTestDatabase({ path: ':memory:' })
     expect(tableNames(db)).toEqual([
       'alarms',
@@ -96,7 +104,7 @@ describe('openDatabase 建库', () => {
       'watchlist'
     ])
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(7)
+    expect(SCHEMA_VERSION).toBe(8)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
@@ -121,10 +129,18 @@ describe('openDatabase 建库', () => {
     expect(countRows(db, 'holiday_cache')).toBe(0)
     expect(countRows(db, 'file_index')).toBe(0)
   })
+
+  it('全新建库的 quick_sites 表直接包含 targets 列', () => {
+    const db = openTestDatabase({ path: ':memory:' })
+    const columns = db
+      .prepare('PRAGMA table_info(quick_sites)')
+      .all() as unknown as { name: string }[]
+    expect(columns.map((column) => column.name)).toContain('targets')
+  })
 })
 
 describe('openDatabase 版本升级', () => {
-  it('v1 数据库升级到 v7 时新增 notes、日历、文件索引与站点表且保留原有数据', () => {
+  it('v1 数据库升级到 v8 时新增 notes、日历、文件索引与站点表且保留原有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -185,12 +201,12 @@ CREATE TABLE settings (
       'settings',
       'watchlist'
     ])
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'watchlist')).toBe(1)
   })
 
-  it('v2 数据库升级到 v7 时新增日历与站点表且保留 notes / alarms 数据', () => {
+  it('v2 数据库升级到 v8 时新增日历与站点表且保留 notes / alarms 数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -250,7 +266,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(tableNames(db)).toEqual([
       'alarms',
       'countdowns',
@@ -286,7 +302,7 @@ CREATE TABLE notes (
     })
   })
 
-  it('v3 数据库升级到 v7 时新增 file_index、quick_sites 表与 category 列且保留既有数据', () => {
+  it('v3 数据库升级到 v8 时新增 file_index、quick_sites 表与 category 列且保留既有数据', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -350,7 +366,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(tableNames(db)).toContain('file_index')
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'alarms')).toBe(1)
@@ -358,7 +374,7 @@ CREATE TABLE notes (
     expect(countRows(db, 'file_index')).toBe(0)
   })
 
-  it('v4 数据库升级到 v7 时为 notes 增加 category 并新增 quick_sites 表', () => {
+  it('v4 数据库升级到 v8 时为 notes 增加 category 并新增 quick_sites 表', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -391,7 +407,7 @@ CREATE TABLE notes (
       name: string
     }[]
     expect(columns.map((column) => column.name)).toContain('category')
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(tableNames(db)).toContain('quick_sites')
 
     const note = db
@@ -401,7 +417,7 @@ CREATE TABLE notes (
     expect(note.category).toBe('')
   })
 
-  it('v5 数据库升级到 v7 时新增 quick_sites 表且便签数据保留', () => {
+  it('v5 数据库升级到 v8 时新增 quick_sites 表且便签数据保留', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -431,7 +447,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'quick_sites')).toBe(0)
     expect(countRows(db, 'notes')).toBe(1)
@@ -449,7 +465,7 @@ CREATE TABLE notes (
     })
   })
 
-  it('v6 数据库升级到 v7 时新增编组表且重复打开不报错', () => {
+  it('v6 数据库升级到 v8 时新增编组表与 targets 列且重复打开不报错', () => {
     const dir = makeTempDir()
     const dbPath = join(dir, 'test.db')
 
@@ -490,7 +506,7 @@ CREATE TABLE quick_sites (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(7)
+    expect(userVersion(db)).toBe(8)
     expect(tableNames(db)).toContain('quick_site_groups')
     expect(countRows(db, 'quick_site_groups')).toBe(0)
     expect(countRows(db, 'quick_sites')).toBe(1)
@@ -498,9 +514,124 @@ CREATE TABLE quick_sites (
     // 重复打开同一数据库：版本已是最新，迁移不报错且数据不变
     closeTestDatabase(db)
     const reopened = openTestDatabase({ path: dbPath })
-    expect(userVersion(reopened)).toBe(7)
+    expect(userVersion(reopened)).toBe(8)
     expect(tableNames(reopened)).toContain('quick_site_groups')
     expect(countRows(reopened, 'quick_sites')).toBe(1)
+  })
+
+  it('v7 数据库升级到 v8 时为 quick_sites 补 targets 列并回填旧列', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v7 数据库（quick_sites 尚无 targets 列）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE quick_sites (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL,
+  browser_id TEXT NOT NULL DEFAULT 'system',
+  profile_id TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO quick_sites (
+          id, name, url, browser_id, profile_id, sort_order,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        's1',
+        'GitHub',
+        'https://github.com/',
+        'chrome',
+        '  Profile 1  ',
+        0,
+        100,
+        100
+      )
+    legacy
+      .prepare(
+        `INSERT INTO quick_sites (
+          id, name, url, browser_id, profile_id, sort_order,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('s2', '未知', 'https://x.com/', 'unknown', 'P2', 1, 200, 200)
+    legacy.exec('PRAGMA user_version = 7')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    expect(userVersion(db)).toBe(8)
+    const columns = db
+      .prepare('PRAGMA table_info(quick_sites)')
+      .all() as unknown as { name: string }[]
+    expect(columns.map((column) => column.name)).toContain('targets')
+
+    const rows = db
+      .prepare(
+        'SELECT id, browser_id, profile_id, targets FROM quick_sites ORDER BY id'
+      )
+      .all() as unknown as {
+      id: string
+      browser_id: string
+      profile_id: string
+      targets: string
+    }[]
+    expect(JSON.parse(rows[0].targets)).toEqual([
+      { browserId: 'chrome', profileId: 'Profile 1' }
+    ])
+    // 非法浏览器回退 system 且角色清空，旧列保持不变
+    expect(JSON.parse(rows[1].targets)).toEqual([
+      { browserId: 'system', profileId: '' }
+    ])
+    expect(rows[1].browser_id).toBe('unknown')
+  })
+
+  it('v7 升级到 v8 的回填可重复执行且不覆盖已有 targets', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE quick_sites (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  url        TEXT NOT NULL,
+  browser_id TEXT NOT NULL DEFAULT 'system',
+  profile_id TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO quick_sites (
+          id, name, url, browser_id, profile_id, sort_order,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('s1', 'GitHub', 'https://github.com/', 'edge', 'P1', 0, 100, 100)
+    legacy.exec('PRAGMA user_version = 7')
+    legacy.close()
+
+    const first = openTestDatabase({ path: dbPath })
+    expect(JSON.parse(readTargets(first, 's1'))).toEqual([
+      { browserId: 'edge', profileId: 'P1' }
+    ])
+    closeTestDatabase(first)
+
+    const second = openTestDatabase({ path: dbPath })
+    expect(userVersion(second)).toBe(8)
+    expect(JSON.parse(readTargets(second, 's1'))).toEqual([
+      { browserId: 'edge', profileId: 'P1' }
+    ])
   })
 })
 

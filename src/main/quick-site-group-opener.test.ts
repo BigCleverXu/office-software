@@ -3,12 +3,15 @@ import {
   SYSTEM_BROWSER_ID,
   type DetectedBrowser,
   type QuickSite,
-  type QuickSiteGroup
+  type QuickSiteGroup,
+  type QuickSiteTarget
 } from '../shared/quick-sites'
 import type { BatchOpenResult } from './quick-site-launcher'
 import {
   openQuickSiteGroup,
-  type GroupOpenDeps
+  openSitesInBrowsers,
+  type GroupOpenDeps,
+  type SiteOpenDeps
 } from './quick-site-group-opener'
 import type { QuickSiteStore } from './quick-site-store'
 
@@ -18,13 +21,20 @@ function makeSite(overrides: Partial<QuickSite> = {}): QuickSite {
     id: 's1',
     name: '站点',
     url: 'https://a.com/',
-    browserId: SYSTEM_BROWSER_ID,
-    profileId: '',
+    targets: [{ browserId: SYSTEM_BROWSER_ID, profileId: '' }],
     sortOrder: 0,
     createdAt: 0,
     updatedAt: 0,
     ...overrides
   }
+}
+
+/** 构造一个目标 */
+function makeTarget(
+  browserId: QuickSiteTarget['browserId'],
+  profileId = ''
+): QuickSiteTarget {
+  return { browserId, profileId }
 }
 
 /** 用内存 map 模拟站点存储 */
@@ -83,8 +93,21 @@ function makeLaunchMock(
   )
 }
 
-/** 构造依赖，默认所有可执行文件均存在 */
+/** 构造站点打开依赖，默认所有可执行文件均存在 */
 function makeDeps(
+  browsers: DetectedBrowser[],
+  launchMock: ReturnType<typeof vi.fn>,
+  exists: (path: string) => boolean = () => true
+): SiteOpenDeps {
+  return {
+    detect: () => browsers,
+    launchBatch: launchMock as unknown as SiteOpenDeps['launchBatch'],
+    exists
+  }
+}
+
+/** 构造编组依赖 */
+function makeGroupDeps(
   sites: QuickSite[],
   browsers: DetectedBrowser[],
   launchMock: ReturnType<typeof vi.fn>,
@@ -98,149 +121,236 @@ function makeDeps(
   }
 }
 
-describe('openQuickSiteGroup', () => {
-  it('按浏览器与角色归并，每组只调用一次批量启动', async () => {
+describe('openSitesInBrowsers', () => {
+  it('同一站点的多个目标各启动一次并合并计数', async () => {
     const sites = [
       makeSite({
-        id: 's1',
-        url: 'https://a.com/',
-        browserId: 'chrome',
-        profileId: 'p1'
-      }),
-      makeSite({
-        id: 's2',
-        url: 'https://b.com/',
-        browserId: 'chrome',
-        profileId: 'p1'
-      }),
-      makeSite({
-        id: 's3',
-        url: 'https://c.com/',
-        browserId: 'chrome',
-        profileId: 'p2'
-      }),
-      makeSite({ id: 's4', url: 'https://d.com/' })
-    ]
-    const launchMock = makeLaunchMock()
-    const deps = makeDeps(sites, [systemBrowser, chromeBrowser], launchMock)
-
-    const result = await openQuickSiteGroup(
-      makeGroup(['s1', 's2', 's3', 's4']),
-      deps
-    )
-
-    const calls = launchMock.mock.calls as [DetectedBrowser, string, string[]][]
-    expect(calls).toHaveLength(3)
-    expect(calls[0][0].id).toBe('chrome')
-    expect(calls[0][1]).toBe('p1')
-    expect(calls[0][2]).toEqual(['https://a.com/', 'https://b.com/'])
-    expect(calls[1][1]).toBe('p2')
-    expect(calls[1][2]).toEqual(['https://c.com/'])
-    expect(calls[2][0].id).toBe(SYSTEM_BROWSER_ID)
-    expect(calls[2][2]).toEqual(['https://d.com/'])
-    expect(result).toEqual({
-      ok: true,
-      opened: 4,
-      fallback: 0,
-      failed: 0
-    })
-  })
-
-  it('浏览器缺失时该组网址回退系统浏览器并累加 fallback', async () => {
-    const sites = [
-      makeSite({
-        id: 's1',
-        url: 'https://a.com/',
-        browserId: 'firefox',
-        profileId: '/p1'
-      }),
-      makeSite({
-        id: 's2',
-        url: 'https://b.com/',
-        browserId: 'firefox',
-        profileId: '/p2'
+        targets: [makeTarget('chrome', 'p1'), makeTarget('chrome', 'p2')]
       })
     ]
     const launchMock = makeLaunchMock()
-    const deps = makeDeps(sites, [systemBrowser], launchMock)
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
 
-    const result = await openQuickSiteGroup(makeGroup(['s1', 's2']), deps)
+    const result = await openSitesInBrowsers(sites, deps)
 
     const calls = launchMock.mock.calls as [DetectedBrowser, string, string[]][]
-    expect(calls).toHaveLength(1)
-    expect(calls[0][0].id).toBe(SYSTEM_BROWSER_ID)
-    expect(calls[0][2]).toEqual(['https://a.com/', 'https://b.com/'])
+    expect(calls).toHaveLength(2)
+    expect(calls[0][1]).toBe('p1')
+    expect(calls[0][2]).toEqual(['https://a.com/'])
+    expect(calls[1][1]).toBe('p2')
+    expect(calls[1][2]).toEqual(['https://a.com/'])
     expect(result).toEqual({
       ok: true,
       opened: 2,
-      fallback: 2,
-      failed: 0
+      fallback: 0,
+      failed: 0,
+      browserNames: ['Google Chrome']
     })
   })
 
-  it('可执行文件缺失时同样回退系统浏览器', async () => {
+  it('跨站点、跨目标的同浏览器角色合并为一次启动', async () => {
     const sites = [
       makeSite({
         id: 's1',
         url: 'https://a.com/',
-        browserId: 'chrome',
-        profileId: 'p1'
+        targets: [makeTarget('chrome', 'p1'), makeTarget('system')]
       }),
-      makeSite({ id: 's2', url: 'https://b.com/' })
+      makeSite({
+        id: 's2',
+        url: 'https://b.com/',
+        targets: [makeTarget('chrome', 'p1')]
+      })
+    ]
+    const launchMock = makeLaunchMock()
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
+
+    const result = await openSitesInBrowsers(sites, deps)
+
+    const calls = launchMock.mock.calls as [DetectedBrowser, string, string[]][]
+    expect(calls).toHaveLength(2)
+    expect(calls[0][0].id).toBe('chrome')
+    expect(calls[0][1]).toBe('p1')
+    expect(calls[0][2]).toEqual(['https://a.com/', 'https://b.com/'])
+    expect(calls[1][0].id).toBe(SYSTEM_BROWSER_ID)
+    expect(calls[1][2]).toEqual(['https://a.com/'])
+    expect(result).toEqual({
+      ok: true,
+      opened: 3,
+      fallback: 0,
+      failed: 0,
+      browserNames: ['Google Chrome', '系统默认浏览器']
+    })
+  })
+
+  it('浏览器缺失时逐目标回退系统并累加 fallback', async () => {
+    const sites = [
+      makeSite({
+        targets: [makeTarget('firefox', '/p1'), makeTarget('chrome', 'p1')]
+      })
+    ]
+    const launchMock = makeLaunchMock()
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
+
+    const result = await openSitesInBrowsers(sites, deps)
+
+    const calls = launchMock.mock.calls as [DetectedBrowser, string, string[]][]
+    expect(calls).toHaveLength(2)
+    expect(calls[0][0].id).toBe(SYSTEM_BROWSER_ID)
+    expect(calls[1][0].id).toBe('chrome')
+    expect(calls[1][2]).toEqual(['https://a.com/'])
+    expect(result).toEqual({
+      ok: true,
+      opened: 2,
+      fallback: 1,
+      failed: 0,
+      browserNames: ['系统默认浏览器', 'Google Chrome']
+    })
+  })
+
+  it('可执行文件缺失时同样逐目标回退系统', async () => {
+    const sites = [
+      makeSite({
+        targets: [makeTarget('chrome', 'p1'), makeTarget('system')]
+      })
     ]
     const launchMock = makeLaunchMock()
     const deps = makeDeps(
-      sites,
       [systemBrowser, chromeBrowser],
       launchMock,
       () => false
     )
 
-    const result = await openQuickSiteGroup(makeGroup(['s1', 's2']), deps)
+    const result = await openSitesInBrowsers(sites, deps)
 
     const calls = launchMock.mock.calls as [DetectedBrowser, string, string[]][]
     expect(calls).toHaveLength(1)
     expect(calls[0][0].id).toBe(SYSTEM_BROWSER_ID)
-    expect(calls[0][2]).toEqual(['https://a.com/', 'https://b.com/'])
+    expect(calls[0][2]).toEqual(['https://a.com/', 'https://a.com/'])
     expect(result).toEqual({
       ok: true,
       opened: 2,
       fallback: 1,
-      failed: 0
+      failed: 0,
+      browserNames: ['系统默认浏览器']
     })
   })
 
-  it('累加各组失败数并去重收集错误提示', async () => {
+  it('browserNames 去重保序且系统回退批次使用系统浏览器名称', async () => {
     const sites = [
       makeSite({
-        id: 's1',
-        url: 'https://a.com/',
-        browserId: 'chrome',
-        profileId: 'p1'
+        targets: [
+          makeTarget('system'),
+          makeTarget('chrome', 'p1'),
+          makeTarget('chrome', 'p2')
+        ]
+      })
+    ]
+    const launchMock = makeLaunchMock()
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
+
+    const result = await openSitesInBrowsers(sites, deps)
+
+    expect(result.browserNames).toEqual(['系统默认浏览器', 'Google Chrome'])
+  })
+
+  it('累加失败数并去重收集错误提示', async () => {
+    const sites = [
+      makeSite({
+        targets: [makeTarget('chrome', 'p1'), makeTarget('chrome', 'p2')]
       }),
       makeSite({
         id: 's2',
         url: 'https://b.com/',
-        browserId: 'chrome',
-        profileId: 'p2'
-      }),
-      makeSite({ id: 's3', url: 'https://c.com/' })
+        targets: [makeTarget('system')]
+      })
     ]
     const launchMock = makeLaunchMock((browser) =>
       browser.id === SYSTEM_BROWSER_ID
         ? { ok: true, opened: 1, failed: 0 }
         : { ok: false, opened: 0, failed: 1, error: '打开浏览器失败' }
     )
-    const deps = makeDeps(sites, [systemBrowser, chromeBrowser], launchMock)
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
 
-    const result = await openQuickSiteGroup(makeGroup(['s1', 's2', 's3']), deps)
+    const result = await openSitesInBrowsers(sites, deps)
 
     expect(result).toEqual({
       ok: true,
       opened: 1,
       fallback: 0,
       failed: 2,
+      browserNames: ['Google Chrome', '系统默认浏览器'],
       errors: ['打开浏览器失败']
+    })
+  })
+
+  it('没有任何可打开目标时返回可读错误且不探测浏览器', async () => {
+    const launchMock = makeLaunchMock()
+    const detect = vi.fn(() => [systemBrowser])
+    const deps: SiteOpenDeps = {
+      detect,
+      launchBatch: launchMock as unknown as SiteOpenDeps['launchBatch']
+    }
+
+    const result = await openSitesInBrowsers([makeSite({ targets: [] })], deps)
+
+    expect(result).toEqual({
+      ok: false,
+      opened: 0,
+      fallback: 0,
+      failed: 0,
+      browserNames: [],
+      errors: ['没有可用的打开方式']
+    })
+    expect(detect).not.toHaveBeenCalled()
+    expect(launchMock).not.toHaveBeenCalled()
+  })
+
+  it('全部失败时 ok 为 false', async () => {
+    const sites = [makeSite({ targets: [makeTarget('chrome', 'p1')] })]
+    const launchMock = makeLaunchMock(() => ({
+      ok: false,
+      opened: 0,
+      failed: 1,
+      error: '打开浏览器失败'
+    }))
+    const deps = makeDeps([systemBrowser, chromeBrowser], launchMock)
+
+    const result = await openSitesInBrowsers(sites, deps)
+
+    expect(result).toEqual({
+      ok: false,
+      opened: 0,
+      fallback: 0,
+      failed: 1,
+      browserNames: ['Google Chrome'],
+      errors: ['打开浏览器失败']
+    })
+  })
+})
+
+describe('openQuickSiteGroup', () => {
+  it('解析多目标站点后交给通用打开逻辑并汇总结果', async () => {
+    const sites = [
+      makeSite({
+        id: 's1',
+        url: 'https://a.com/',
+        targets: [makeTarget('chrome', 'p1'), makeTarget('system')]
+      })
+    ]
+    const launchMock = makeLaunchMock()
+    const deps = makeGroupDeps(
+      sites,
+      [systemBrowser, chromeBrowser],
+      launchMock
+    )
+
+    const result = await openQuickSiteGroup(makeGroup(['s1']), deps)
+
+    expect(result).toEqual({
+      ok: true,
+      opened: 2,
+      fallback: 0,
+      failed: 0
     })
   })
 
@@ -266,29 +376,30 @@ describe('openQuickSiteGroup', () => {
     expect(launchMock).not.toHaveBeenCalled()
   })
 
-  it('全部失败时 ok 为 false', async () => {
+  it('编组入口保留逐目标回退与错误提示', async () => {
     const sites = [
       makeSite({
         id: 's1',
-        url: 'https://a.com/',
-        browserId: 'chrome',
-        profileId: 'p1'
+        targets: [makeTarget('firefox', '/p1'), makeTarget('chrome', 'p1')]
       })
     ]
-    const launchMock = makeLaunchMock(() => ({
-      ok: false,
-      opened: 0,
-      failed: 1,
-      error: '打开浏览器失败'
-    }))
-    const deps = makeDeps(sites, [systemBrowser, chromeBrowser], launchMock)
+    const launchMock = makeLaunchMock((browser) =>
+      browser.id === SYSTEM_BROWSER_ID
+        ? { ok: true, opened: 1, failed: 0 }
+        : { ok: false, opened: 0, failed: 1, error: '打开浏览器失败' }
+    )
+    const deps = makeGroupDeps(
+      sites,
+      [systemBrowser, chromeBrowser],
+      launchMock
+    )
 
     const result = await openQuickSiteGroup(makeGroup(['s1']), deps)
 
     expect(result).toEqual({
-      ok: false,
-      opened: 0,
-      fallback: 0,
+      ok: true,
+      opened: 1,
+      fallback: 1,
       failed: 1,
       errors: ['打开浏览器失败']
     })

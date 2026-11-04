@@ -4,8 +4,7 @@ import { shell } from 'electron'
 import {
   SYSTEM_BROWSER_ID,
   normalizeQuickSiteUrl,
-  type DetectedBrowser,
-  type OpenQuickSiteResult
+  type DetectedBrowser
 } from '../shared/quick-sites'
 
 /** 启动依赖，可在测试中注入 */
@@ -114,82 +113,6 @@ async function openSequentially(
   return firstError === undefined
     ? { ok: opened > 0, opened, failed }
     : { ok: opened > 0, opened, failed, error: firstError }
-}
-
-/** 按内核拼装命令与参数 */
-function buildCommand(
-  browser: DetectedBrowser,
-  profileId: string,
-  url: string
-): { command: string; args: string[] } {
-  if (browser.kind === 'safari') {
-    return { command: 'open', args: ['-a', 'Safari', url] }
-  }
-  if (browser.kind === 'firefox') {
-    return {
-      command: browser.executable,
-      args:
-        profileId !== ''
-          ? ['--new-instance', '--profile', profileId, url]
-          : [url]
-    }
-  }
-  return {
-    command: browser.executable,
-    args: profileId !== '' ? [url, `--profile-directory=${profileId}`] : [url]
-  }
-}
-
-/**
- * 用指定浏览器与角色打开网址。
- *
- * 启动前再次校验网址协议；系统默认浏览器走 shell.openExternal，其余
- * 以分离进程启动，不阻塞界面。任何失败都收敛为可读结果，不抛出异常。
- */
-export async function openUrlInBrowser(
-  browser: DetectedBrowser,
-  profileId: string,
-  url: string,
-  deps?: LaunchDeps
-): Promise<OpenQuickSiteResult> {
-  const normalizedUrl = normalizeQuickSiteUrl(url)
-  if (normalizedUrl === '') {
-    return { ok: false, error: INVALID_URL_ERROR }
-  }
-  const openExternal =
-    deps?.openExternal ?? ((target: string) => shell.openExternal(target))
-  const exists = deps?.exists ?? existsSync
-
-  if (browser.id === SYSTEM_BROWSER_ID || browser.kind === 'system') {
-    try {
-      await openExternal(normalizedUrl)
-      return { ok: true, browserName: browser.name }
-    } catch {
-      return { ok: false, error: LAUNCH_FAILED_ERROR }
-    }
-  }
-  if (!exists(browser.executable)) {
-    return { ok: false, error: MISSING_EXECUTABLE_ERROR }
-  }
-
-  const runner = deps?.spawn ?? spawn
-  const { command, args } = buildCommand(browser, profileId, normalizedUrl)
-  try {
-    const child = runner(command, args, {
-      detached: true,
-      stdio: 'ignore'
-    })
-    // 监听异步错误，避免进程级未处理异常
-    if (typeof child.on === 'function') {
-      child.on('error', () => {})
-    }
-    if (typeof child.unref === 'function') {
-      child.unref()
-    }
-    return { ok: true, browserName: browser.name }
-  } catch {
-    return { ok: false, error: LAUNCH_FAILED_ERROR }
-  }
 }
 
 /**

@@ -10,13 +10,18 @@ import {
   type WatchItem
 } from '../shared/market'
 import { DEFAULT_MODULE, isAppModuleId } from '../shared/navigation'
+import {
+  SYSTEM_BROWSER_ID,
+  isBrowserId,
+  normalizeQuickSiteProfileId
+} from '../shared/quick-sites'
 import type { Alarm } from '../shared/types'
 
 /** 数据库文件名 */
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -79,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_file_index_kind ON file_index(kind);
 CREATE INDEX IF NOT EXISTS idx_file_index_root ON file_index(root);
 `
 
-/** quick_sites 表与索引建表语句（v6 新增，也用于旧版本升级） */
+/** quick_sites 表与索引建表语句（v6 新增，v8 增加 targets 列） */
 const QUICK_SITES_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS quick_sites (
   id         TEXT PRIMARY KEY,
@@ -87,6 +92,7 @@ CREATE TABLE IF NOT EXISTS quick_sites (
   url        TEXT NOT NULL,
   browser_id TEXT NOT NULL DEFAULT 'system',
   profile_id TEXT NOT NULL DEFAULT '',
+  targets    TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
@@ -206,6 +212,7 @@ export interface QuickSiteRow {
   url: string
   browser_id: string
   profile_id: string
+  targets: string
   sort_order: number
   created_at: number
   updated_at: number
@@ -248,12 +255,44 @@ function readUserVersion(db: DatabaseSync): number {
   return row?.user_version ?? 0
 }
 
+/** 回填 targets 时读取的旧列 */
+interface LegacyQuickSiteTargetRow {
+  id: string
+  browser_id: string
+  profile_id: string
+}
+
+/**
+ * 按旧列 browser_id / profile_id 回填 targets 列。
+ *
+ * 只处理 targets 为空字符串的行，重复执行不会覆盖已写入的多目标数据。
+ */
+function backfillQuickSiteTargets(db: DatabaseSync): void {
+  const rows = db
+    .prepare(
+      `SELECT id, browser_id, profile_id FROM quick_sites WHERE targets = ''`
+    )
+    .all() as unknown as LegacyQuickSiteTargetRow[]
+  if (rows.length === 0) {
+    return
+  }
+  const update = db.prepare('UPDATE quick_sites SET targets = ? WHERE id = ?')
+  for (const row of rows) {
+    const browserId = isBrowserId(row.browser_id)
+      ? row.browser_id
+      : SYSTEM_BROWSER_ID
+    const profileId = normalizeQuickSiteProfileId(row.profile_id, browserId)
+    update.run(JSON.stringify([{ browserId, profileId }]), row.id)
+  }
+}
+
 /**
  * 按 PRAGMA user_version 逐版本升级表结构：
  * v0 全新建库建全部表；v1 先补 notes 表；随后在 v3 之前补
  * countdowns / holiday_cache 表；v4 之前补 file_index 表及其索引；
  * v5 之前为 notes 补 category 列；v6 之前补 quick_sites 表；
- * v7 之前补 quick_site_groups 表；已是最新版本则直接返回。
+ * v7 之前补 quick_site_groups 表；v8 之前为 quick_sites 补 targets 列
+ * 并用旧的 browser_id / profile_id 回填；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -289,6 +328,17 @@ function applySchema(db: DatabaseSync): void {
     if (version < 7) {
       // v1–v6 -> v7：新增快捷网站编组表；v0 时重复执行 IF NOT EXISTS 也安全
       db.exec(QUICK_SITE_GROUPS_TABLE_SQL)
+    }
+    if (version >= 6 && version < 8) {
+      // v6 / v7 -> v8：quick_sites 表已存在，补 targets 列；
+      // v0–v5 的建表语句已含该列，不能执行 ALTER 以免重复列报错
+      db.exec(
+        "ALTER TABLE quick_sites ADD COLUMN targets TEXT NOT NULL DEFAULT ''"
+      )
+    }
+    if (version < 8) {
+      // v1–v7 -> v8：按旧列回填 targets，空字符串表示尚未回填
+      backfillQuickSiteTargets(db)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')

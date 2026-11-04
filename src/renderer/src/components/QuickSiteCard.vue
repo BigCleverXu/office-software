@@ -5,7 +5,8 @@ import {
   hostOf,
   SYSTEM_BROWSER_ID,
   type DetectedBrowser,
-  type QuickSite
+  type QuickSite,
+  type QuickSiteTarget
 } from '@shared/quick-sites'
 import { BROWSER_LABELS, siteAccent, siteInitials } from '@/lib/site-visuals'
 import { Button } from '@/components/ui/button'
@@ -18,11 +19,10 @@ import {
 const props = withDefaults(
   defineProps<{
     site: QuickSite
-    browser?: DetectedBrowser
-    profileName?: string
+    browsers?: DetectedBrowser[]
     opening?: boolean
   }>(),
-  { profileName: '', opening: false }
+  { browsers: () => [], opening: false }
 )
 
 const emit = defineEmits<{
@@ -38,39 +38,61 @@ const accent = computed(() => siteAccent(props.site.url))
 /** 展示域名：去掉 www. 前缀 */
 const host = computed(() => hostOf(props.site.url).replace(/^www\./, ''))
 
-const isSystem = computed(() => props.site.browserId === SYSTEM_BROWSER_ID)
+interface TargetLabel {
+  text: string
+  warn: boolean
+}
 
-/** 目标浏览器的无障碍描述 */
-const targetLabel = computed(() => {
-  if (isSystem.value) {
-    return BROWSER_LABELS.system
+/** 解析单个打开方式的可读标签 */
+const resolveTargetLabel = (target: QuickSiteTarget): TargetLabel => {
+  if (target.browserId === SYSTEM_BROWSER_ID) {
+    return { text: BROWSER_LABELS.system, warn: false }
   }
-  if (props.browser) {
-    return props.profileName
-      ? `${props.browser.name} · ${props.profileName}`
-      : `${props.browser.name} · 默认角色`
-  }
-  return BROWSER_LABELS[props.site.browserId]
-})
-
-const ariaLabel = computed(
-  () => `用 ${targetLabel.value} 打开 ${props.site.name}`
-)
-
-/** 底部目标徽标：系统 / 已检测浏览器 / 浏览器不可用 */
-const badge = computed<{ text: string; warn: boolean }>(() => {
-  if (isSystem.value) {
-    return { text: '系统默认', warn: false }
-  }
-  if (props.browser) {
+  const browser = props.browsers.find((item) => item.id === target.browserId)
+  if (browser === undefined) {
     return {
-      text: props.profileName
-        ? `${props.browser.name} · ${props.profileName}`
-        : `${props.browser.name} · 默认角色`,
-      warn: false
+      text: `${BROWSER_LABELS[target.browserId]}（不可用）`,
+      warn: true
     }
   }
-  return { text: '浏览器不可用', warn: true }
+  if (target.profileId === '') {
+    return { text: `${browser.name} · 默认角色`, warn: false }
+  }
+  const profile = browser.profiles.find((item) => item.id === target.profileId)
+  if (profile === undefined) {
+    return { text: `${browser.name} · 角色（不可用）`, warn: true }
+  }
+  return { text: `${browser.name} · ${profile.name}`, warn: false }
+}
+
+const targetLabels = computed<TargetLabel[]>(() =>
+  props.site.targets.map((target) => resolveTargetLabel(target))
+)
+
+const ariaLabel = computed(() => {
+  const labels = targetLabels.value
+  if (labels.length === 1) {
+    return `用 ${labels[0]?.text ?? ''} 打开 ${props.site.name}`
+  }
+  return `用 ${labels.length} 个打开方式打开 ${props.site.name}`
+})
+
+/** 底部目标徽标：单目标显示标签，多目标显示数量 */
+const badge = computed<{
+  text: string
+  title: string
+  warn: boolean
+}>(() => {
+  const labels = targetLabels.value
+  const first = labels[0]
+  if (labels.length === 1 && first) {
+    return { text: first.text, title: first.text, warn: first.warn }
+  }
+  return {
+    text: `${labels.length} 个打开方式`,
+    title: labels.map((label) => label.text).join('、'),
+    warn: labels.some((label) => label.warn)
+  }
 })
 
 const handleOpen = (): void => {
@@ -165,7 +187,7 @@ const handleKeydown = (event: KeyboardEvent): void => {
       <span
         class="bg-foreground/5 inline-flex max-w-full min-w-0 items-center gap-1 rounded-md px-2 py-0.5 text-[10px] leading-none"
         :class="{ 'text-destructive': badge.warn }"
-        :title="badge.text"
+        :title="badge.title"
       >
         <AlertTriangle
           v-if="badge.warn"

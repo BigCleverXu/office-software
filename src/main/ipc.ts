@@ -71,7 +71,6 @@ import type { FileSearchService } from './file-search-service'
 import {
   QUICK_SITE_CHANNELS,
   QUICK_SITE_GROUP_CHANNELS,
-  SYSTEM_BROWSER_ID,
   type BrowserScanResult,
   type DetectedBrowser,
   type OpenQuickSiteGroupResult,
@@ -82,8 +81,11 @@ import {
   type QuickSiteSaveResult
 } from '../shared/quick-sites'
 import { detectBrowsers } from './browser-detector'
-import { openUrlsInBrowser, openUrlInBrowser } from './quick-site-launcher'
-import { openQuickSiteGroup } from './quick-site-group-opener'
+import { openUrlsInBrowser } from './quick-site-launcher'
+import {
+  openQuickSiteGroup,
+  openSitesInBrowsers
+} from './quick-site-group-opener'
 import type { QuickSiteGroupStore } from './quick-site-group-store'
 import type { QuickSiteStore } from './quick-site-store'
 
@@ -868,31 +870,23 @@ export interface QuickSiteIpcDeps {
   getWindow: () => BrowserWindow | null
   /** 注入探测实现以便扩展 / 测试；默认使用 detectBrowsers */
   detect?: () => DetectedBrowser[]
-  /** 注入启动实现以便测试；默认使用 openUrlInBrowser */
-  launch?: typeof openUrlInBrowser
+  /** 注入批量启动实现以便测试；默认使用 openUrlsInBrowser */
+  launchBatch?: typeof openUrlsInBrowser
   /** 判断可执行文件是否存在，默认 existsSync */
   exists?: (path: string) => boolean
-}
-
-/** 探测结果缺失系统默认浏览器时的兜底项 */
-const FALLBACK_SYSTEM_BROWSER: DetectedBrowser = {
-  id: SYSTEM_BROWSER_ID,
-  name: '系统默认浏览器',
-  kind: 'system',
-  executable: '',
-  profiles: []
 }
 
 /**
  * 注册快捷网站 IPC 通道：
  * - 列表 / 新增 / 更新 / 删除，变更成功后广播最新列表
  * - 扫描本机浏览器与角色
- * - 按站点配置启动：浏览器不可用或可执行文件缺失时回退系统默认浏览器
+ * - 按站点的全部打开方式启动：浏览器不可用或可执行文件缺失时逐目标
+ *   回退系统默认浏览器
  */
 export function registerQuickSiteIpc(deps: QuickSiteIpcDeps): void {
   const { store, getWindow } = deps
   const detect = deps.detect ?? (() => detectBrowsers())
-  const launch = deps.launch ?? openUrlInBrowser
+  const launchBatch = deps.launchBatch ?? openUrlsInBrowser
   const fileExists = deps.exists ?? existsSync
 
   const broadcast = (): void => {
@@ -954,28 +948,24 @@ export function registerQuickSiteIpc(deps: QuickSiteIpcDeps): void {
       _event: Electron.IpcMainInvokeEvent,
       id: unknown
     ): Promise<OpenQuickSiteResult> => {
+      const notFound: OpenQuickSiteResult = {
+        ok: false,
+        opened: 0,
+        fallback: 0,
+        failed: 0,
+        browserNames: [],
+        errors: ['站点不存在']
+      }
       if (typeof id !== 'string') {
-        return { ok: false, error: '站点不存在' }
+        return notFound
       }
       const site = store.getById(id)
       if (site === null) {
-        return { ok: false, error: '站点不存在' }
+        return notFound
       }
-      const browsers = detect()
-      const systemBrowser =
-        browsers.find((browser) => browser.id === SYSTEM_BROWSER_ID) ??
-        FALLBACK_SYSTEM_BROWSER
-      if (site.browserId === SYSTEM_BROWSER_ID) {
-        return launch(systemBrowser, '', site.url, { exists: fileExists })
-      }
-      const browser = browsers.find((item) => item.id === site.browserId)
-      if (browser === undefined || !fileExists(browser.executable)) {
-        const result = await launch(systemBrowser, '', site.url, {
-          exists: fileExists
-        })
-        return result.ok ? { ...result, fallback: true } : result
-      }
-      return launch(browser, site.profileId, site.url, {
+      return openSitesInBrowsers([site], {
+        detect,
+        launchBatch,
         exists: fileExists
       })
     }
