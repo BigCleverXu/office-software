@@ -42,16 +42,6 @@ const sectionViews = computed<NewsCardView[]>(() =>
   }))
 )
 
-/** 宽屏左列：按奇偶固定分配，展开状态不会引起跨列跳动 */
-const leftColumn = computed(() =>
-  sectionViews.value.filter((_, index) => index % 2 === 0)
-)
-
-/** 宽屏右列 */
-const rightColumn = computed(() =>
-  sectionViews.value.filter((_, index) => index % 2 === 1)
-)
-
 /** 更新时间文案：HH:mm，尚未拉取时显示 -- */
 const updatedLabel = computed(() => {
   if (updatedAt.value === 0) return '--'
@@ -110,7 +100,7 @@ onUnmounted(() => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex items-center justify-between gap-3 px-6 py-4">
+    <div class="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
       <span class="text-muted-foreground text-sm">
         已选 {{ selectedPlatforms.length }} 个平台 · 更新于 {{ updatedLabel }}
       </span>
@@ -137,18 +127,18 @@ onUnmounted(() => {
 
     <div
       v-if="showProgress"
-      class="bg-muted relative mx-6 mb-3 h-0.5 overflow-hidden"
+      class="bg-muted relative mx-6 mb-3 h-0.5 shrink-0 overflow-hidden"
     >
       <div
         class="bg-primary absolute inset-y-0 w-1/3 animate-[news-progress_1.2s_ease-in-out_infinite] motion-reduce:animate-none"
       ></div>
     </div>
 
-    <p v-if="error" class="text-destructive px-6 pb-3 text-sm">
+    <p v-if="error" class="text-destructive shrink-0 px-6 pb-3 text-sm">
       {{ error }}
     </p>
 
-    <div class="flex-1 overflow-y-auto px-6 pb-6 py-2">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-6 pb-6 py-2">
       <div
         v-if="showSkeleton"
         class="stagger-list columns-1 gap-3 lg:columns-2"
@@ -178,37 +168,14 @@ onUnmounted(() => {
         </Card>
       </div>
 
-      <div v-else>
-        <div class="hidden gap-3 lg:grid lg:grid-cols-2 lg:items-start">
-          <div class="stagger-list flex min-w-0 flex-col gap-3">
-            <NewsCard
-              v-for="view in leftColumn"
-              :key="view.platform"
-              :view="view"
-              @refresh="handleRefresh"
-              @toggle="toggleExpanded(view.platform)"
-            />
-          </div>
-          <div class="stagger-list flex min-w-0 flex-col gap-3">
-            <NewsCard
-              v-for="view in rightColumn"
-              :key="view.platform"
-              :view="view"
-              @refresh="handleRefresh"
-              @toggle="toggleExpanded(view.platform)"
-            />
-          </div>
-        </div>
-
-        <div class="stagger-list flex flex-col gap-3 lg:hidden">
-          <NewsCard
-            v-for="view in sectionViews"
-            :key="view.platform"
-            :view="view"
-            @refresh="handleRefresh"
-            @toggle="toggleExpanded(view.platform)"
-          />
-        </div>
+      <div v-else class="stagger-list grid gap-3 lg:grid-cols-2 lg:items-start">
+        <NewsCard
+          v-for="view in sectionViews"
+          :key="view.platform"
+          :view="view"
+          @refresh="handleRefresh"
+          @toggle="toggleExpanded(view.platform)"
+        />
       </div>
     </div>
 

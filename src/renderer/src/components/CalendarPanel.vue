@@ -132,6 +132,9 @@ const dayCountdowns = computed(
 
 const dialogOpen = ref(false)
 const editing = ref<Countdown | null>(null)
+/** 提交中状态与提交失败提示，由弹窗内展示 */
+const saving = ref(false)
+const formError = ref('')
 
 /** 新建表单的默认日期：右键新建时使用被点击的日期，不改变选中态 */
 const formDefaultDate = ref<string | undefined>(undefined)
@@ -151,6 +154,7 @@ const handleSelect = (cell: MonthCell): void => {
 const openCreate = (): void => {
   editing.value = null
   formDefaultDate.value = selectedDate.value ?? undefined
+  formError.value = ''
   dialogOpen.value = true
 }
 
@@ -158,6 +162,7 @@ const openCreate = (): void => {
 const handleCreateAt = (cell: MonthCell): void => {
   editing.value = null
   formDefaultDate.value = cell.date
+  formError.value = ''
   dialogOpen.value = true
 }
 
@@ -202,10 +207,22 @@ const openEdit = (countdown: Countdown): void => {
 }
 
 const handleSubmit = async (draft: CountdownDraft): Promise<void> => {
-  if (editing.value) {
-    await update(editing.value.id, draft)
-  } else {
-    await create(draft)
+  saving.value = true
+  formError.value = ''
+  try {
+    const result = editing.value
+      ? await update(editing.value.id, draft)
+      : await create(draft)
+    if (result === null) {
+      formError.value = '保存失败，请稍后重试'
+      return
+    }
+    dialogOpen.value = false
+    editing.value = null
+  } catch {
+    formError.value = '保存失败，请稍后重试'
+  } finally {
+    saving.value = false
   }
 }
 
@@ -238,6 +255,7 @@ const handleDetailEdit = (): void => {
   if (!target) return
   editing.value = target
   formDefaultDate.value = target.date
+  formError.value = ''
   dialogOpen.value = true
 }
 
@@ -313,7 +331,9 @@ const handleDetailRemove = async (): Promise<void> => {
       </Button>
     </div>
 
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
+    <div
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-py-2 px-6 pt-2 pb-6"
+    >
       <section
         v-show="activeTab === 'calendar'"
         id="calendar-panel-calendar"
@@ -397,6 +417,8 @@ const handleDetailRemove = async (): Promise<void> => {
       v-model:open="dialogOpen"
       :countdown="editing"
       :default-date="formDefaultDate"
+      :saving="saving"
+      :error="formError"
       @submit="handleSubmit"
     />
 

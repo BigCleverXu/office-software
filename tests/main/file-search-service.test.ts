@@ -184,11 +184,16 @@ describe('FileSearchService.addRoots / removeRoot', () => {
     ])
     expect(first.roots).toEqual([dirA])
 
+    await waitFor(() => !service.getState().scanning)
+
     const second = service.addRoots([dirB, dirA])
     expect(second.roots).toEqual([dirA, dirB])
 
     await waitFor(() => !service.getState().scanning)
-    expect(scan).toHaveBeenCalled()
+    expect(scan).toHaveBeenCalledTimes(2)
+    expect(scan).toHaveBeenLastCalledWith(
+      expect.objectContaining({ roots: [dirA, dirB] })
+    )
   })
 
   it('removeRoot 后该目录索引不再出现在搜索结果', () => {
@@ -468,6 +473,36 @@ describe('FileSearchService 扫描调度', () => {
     expect(service.search({ keyword: 'keep' }).entries[0].path).toBe(
       join(root, 'keep.txt')
     )
+  })
+
+  it('某 root 遍历失败时跳过 finishRun，保留该 root 的旧索引', async () => {
+    const missing = join(root, 'missing-root')
+    store.setRoots([root, missing])
+    // 上一轮扫描留下的旧索引
+    store.upsertBatch(root, 1, [makeEntry(join(root, 'old.txt'))])
+    store.upsertBatch(missing, 1, [makeEntry(join(missing, 'kept.txt'))])
+    const finishRun = vi.spyOn(store, 'finishRun')
+    const service = createService({
+      scan: async (options: FileScanOptions): Promise<FileScanSummary> => {
+        options.onBatch(root, [makeEntry(join(root, 'new.txt'))])
+        return {
+          scanned: 1,
+          rootCounts: { [root]: 1 },
+          skippedRoots: [missing]
+        }
+      }
+    })
+
+    service.rescan()
+    await waitFor(() => !service.getState().scanning)
+
+    // 失败 root 不清理，其旧索引仍可搜索
+    expect(finishRun).toHaveBeenCalledTimes(1)
+    expect(finishRun).toHaveBeenCalledWith(root, expect.any(Number))
+    expect(service.search({ keyword: 'kept' }).total).toBe(1)
+    // 正常 root 照常清理旧行，只保留本轮写入
+    expect(service.search({ keyword: 'old' }).total).toBe(0)
+    expect(service.search({ keyword: 'new' }).total).toBe(1)
   })
 
   it('使用真实扫描构建索引（集成用例）', async () => {

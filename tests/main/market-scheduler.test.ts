@@ -136,6 +136,14 @@ describe('nextSessionStart', () => {
     expect(nextSessionStart(at(11, 0).getTime())).toBe(at(13, 0).getTime())
   })
 
+  it('午休 12:00 返回当日 13:00', () => {
+    expect(nextSessionStart(at(12, 0).getTime())).toBe(at(13, 0).getTime())
+  })
+
+  it('上午盘末尾 11:29 仍返回当日 13:00', () => {
+    expect(nextSessionStart(at(11, 29).getTime())).toBe(at(13, 0).getTime())
+  })
+
   it('下午盘后返回下一工作日 09:30', () => {
     expect(nextSessionStart(at(14, 0).getTime())).toBe(
       at(9, 30, 0, 3, 15).getTime()

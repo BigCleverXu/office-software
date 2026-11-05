@@ -351,15 +351,21 @@ export class FileSearchService {
     const roots = this.store.getRoots()
     try {
       if (roots.length > 0) {
-        await this.scan({
+        const summary = await this.scan({
           roots,
           runToken,
           batchSize: SCAN_BATCH_SIZE,
           onBatch: (root, entries) => this.handleBatch(root, entries, runToken),
           onProgress: (progress) => this.handleProgress(progress)
         })
-        // 只保留本轮写入的行，清理扫描期间被删除的文件
+        // 遍历失败的 root 保留旧索引，其余 root 正常清理本轮之外的陈旧行
+        const skipped = new Set(
+          (summary.skippedRoots ?? []).map((root) => rootKey(resolve(root)))
+        )
         for (const root of roots) {
+          if (skipped.has(rootKey(resolve(root)))) {
+            continue
+          }
           this.store.finishRun(root, runToken)
         }
       }

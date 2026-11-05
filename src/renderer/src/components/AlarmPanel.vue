@@ -12,6 +12,9 @@ const { alarms, create, update, remove, toggle } = useAlarms()
 
 const dialogOpen = ref(false)
 const editing = ref<Alarm | null>(null)
+/** 提交中状态与提交失败提示，由弹窗内展示 */
+const saving = ref(false)
+const formError = ref('')
 
 const enabledCount = computed(
   () => alarms.value.filter((alarm) => alarm.enabled).length
@@ -19,19 +22,33 @@ const enabledCount = computed(
 
 const openCreate = (): void => {
   editing.value = null
+  formError.value = ''
   dialogOpen.value = true
 }
 
 const openEdit = (alarm: Alarm): void => {
   editing.value = alarm
+  formError.value = ''
   dialogOpen.value = true
 }
 
 const handleSubmit = async (draft: AlarmDraft): Promise<void> => {
-  if (editing.value) {
-    await update(editing.value.id, draft)
-  } else {
-    await create(draft)
+  saving.value = true
+  formError.value = ''
+  try {
+    const result = editing.value
+      ? await update(editing.value.id, draft)
+      : await create(draft)
+    if (result === null) {
+      formError.value = '保存失败，请稍后重试'
+      return
+    }
+    dialogOpen.value = false
+    editing.value = null
+  } catch {
+    formError.value = '保存失败，请稍后重试'
+  } finally {
+    saving.value = false
   }
 }
 
@@ -52,7 +69,7 @@ const handleRemove = async (alarm: Alarm): Promise<void> => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex items-center justify-between px-6 py-4">
+    <div class="flex shrink-0 items-center justify-between px-6 py-4">
       <p class="text-muted-foreground text-sm">
         共
         <span class="text-foreground font-medium">{{ alarms.length }}</span>
@@ -66,7 +83,7 @@ const handleRemove = async (alarm: Alarm): Promise<void> => {
       </Button>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-6 py-2">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-6 py-2">
       <div
         v-if="alarms.length === 0"
         class="empty-state text-muted-foreground h-full"
@@ -96,6 +113,8 @@ const handleRemove = async (alarm: Alarm): Promise<void> => {
     <AlarmFormDialog
       v-model:open="dialogOpen"
       :alarm="editing"
+      :saving="saving"
+      :error="formError"
       @submit="handleSubmit"
     />
   </div>

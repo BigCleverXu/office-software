@@ -160,6 +160,8 @@ const settingsItemClass = computed(() =>
 
       <button
         type="button"
+        :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
+        :aria-expanded="!collapsed"
         class="text-muted-foreground hover:bg-sidebar-accent flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 hover:text-sidebar-accent-foreground"
         @click="emit('toggle')"
       >

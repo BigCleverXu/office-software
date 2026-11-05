@@ -37,6 +37,8 @@ const HOLIDAY_GRACE_MS = 90000
 const MORNING_START_SEC = 9 * 3600 + 30 * 60
 /** 上午盘终点（秒） 11:30:00 */
 const MORNING_END_SEC = 11 * 3600 + 30 * 60
+/** 下午盘起点（秒） 13:00:00 */
+const AFTERNOON_START_SEC = 13 * 3600
 
 export interface MarketSchedulerDeps {
   /** 取数函数；默认用 quote-provider 的 fetchQuotes，测试时注入假实现 */
@@ -121,14 +123,22 @@ function maxQuoteTimeMs(now: number, quotes: Quote[]): number | null {
 
 /**
  * 下一次「交易时段起点」（用于节假日休市后重新尝试）：
- * now 处于上午盘（09:30–11:30）→ 当日 13:00；
- * 否则（含午休 / 下午盘后 / 非交易日）→ 下一个工作日 09:30。
+ * now 处于上午盘（09:30–11:30）或午休（11:30–13:00）→ 当日 13:00；
+ * 否则（含下午盘后 / 非交易日）→ 下一个工作日 09:30。
  */
 export function nextSessionStart(now: number): number {
   const date = new Date(now)
   const sec =
     date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds()
   if (isTradingDay(date) && sec >= MORNING_START_SEC && sec < MORNING_END_SEC) {
+    return atClock(date, 13, 0)
+  }
+  // 午休期间（11:30 起至 13:00 前）仍应等待当日 13:00 重新开始
+  if (
+    isTradingDay(date) &&
+    sec >= MORNING_END_SEC &&
+    sec < AFTERNOON_START_SEC
+  ) {
     return atClock(date, 13, 0)
   }
   return nextTradingDayOpen(date)

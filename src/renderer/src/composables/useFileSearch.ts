@@ -28,7 +28,7 @@ export interface UseFileSearch {
   scanningProgress: ComputedRef<FileScanProgress>
   loadState: () => Promise<void>
   runSearch: () => Promise<void>
-  rescan: () => Promise<void>
+  rescan: () => Promise<boolean>
   addRoots: () => Promise<boolean>
   removeRoot: (root: string) => Promise<void>
   moveSelection: (delta: number) => void
@@ -147,12 +147,13 @@ function createFileSearch(): UseFileSearch {
     }
   }
 
-  const rescan = async (): Promise<void> => {
+  const rescan = async (): Promise<boolean> => {
     try {
       applyState(await window.api.files.rescan())
       await runSearch()
+      return true
     } catch {
-      // 失败时保持界面可用
+      return false
     }
   }
 

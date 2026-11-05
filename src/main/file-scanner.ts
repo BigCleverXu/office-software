@@ -39,6 +39,8 @@ export interface FileScanOptions {
 export interface FileScanSummary {
   scanned: number
   rootCounts: Record<string, number>
+  /** 未能成功遍历的根目录：这些目录的旧索引应保留 */
+  skippedRoots?: string[]
 }
 
 /** 批次大小兜底：非正数或非法值回退默认值 */
@@ -116,6 +118,7 @@ export async function scanRoots(
 ): Promise<FileScanSummary> {
   const batchSize = normalizeBatchSize(options.batchSize)
   const rootCounts: Record<string, number> = {}
+  const skippedRoots: string[] = []
   let scanned = 0
   let batchRoot = ''
   let batch: FileEntry[] = []
@@ -150,10 +153,10 @@ export async function scanRoots(
     }
   }
 
-  /** 递归扫描单个目录 */
-  const scanDir = async (root: string, dirPath: string): Promise<void> => {
+  /** 递归扫描单个目录；返回 false 表示该目录遍历失败 */
+  const scanDir = async (root: string, dirPath: string): Promise<boolean> => {
     if (options.signal?.aborted) {
-      return
+      return true
     }
     report(dirPath, false)
     let dir: Dir
@@ -161,7 +164,7 @@ export async function scanRoots(
       dir = await fs.opendir(dirPath)
     } catch {
       // 无权限、已被删除等：跳过该目录
-      return
+      return false
     }
     try {
       for await (const dirent of dir) {
@@ -193,7 +196,9 @@ export async function scanRoots(
       }
     } catch {
       // 遍历途中的异常（如目录被移除）只保留已扫描结果
+      return false
     }
+    return true
   }
 
   for (const root of options.roots) {
@@ -205,16 +210,20 @@ export async function scanRoots(
     try {
       stats = await fs.stat(root)
     } catch {
-      // root 不存在：跳过
+      // root 不存在：跳过并保留其旧索引
+      skippedRoots.push(root)
       continue
     }
     if (!stats.isDirectory()) {
+      skippedRoots.push(root)
       continue
     }
-    await scanDir(root, root)
+    if (!(await scanDir(root, root))) {
+      skippedRoots.push(root)
+    }
   }
 
   flush()
   report('', true)
-  return { scanned, rootCounts }
+  return { scanned, rootCounts, skippedRoots }
 }

@@ -107,7 +107,12 @@ export class AlarmScheduler {
         continue
       }
       this.firedKeys.add(key)
-      this.onFire(alarm, now)
+      try {
+        this.onFire(alarm, now)
+      } catch (error) {
+        // 单条提醒失败不影响其余提醒
+        console.error('[alarm-scheduler] onFire failed', alarm.id, error)
+      }
     }
   }
 

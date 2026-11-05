@@ -38,6 +38,9 @@ const {
 
 const dialogOpen = ref(false)
 const editing = ref<Note | null>(null)
+/** 提交中状态与提交失败提示，由弹窗内展示 */
+const saving = ref(false)
+const formError = ref('')
 
 /** 分类重命名输入框实例 */
 const renameInput = ref<InstanceType<typeof Input> | null>(null)
@@ -152,19 +155,33 @@ const emptyText = computed(() => {
 
 const openCreate = (): void => {
   editing.value = null
+  formError.value = ''
   dialogOpen.value = true
 }
 
 const openEdit = (note: Note): void => {
   editing.value = note
+  formError.value = ''
   dialogOpen.value = true
 }
 
 const handleSubmit = async (draft: NoteDraft): Promise<void> => {
-  if (editing.value) {
-    await update(editing.value.id, draft)
-  } else {
-    await create(draft)
+  saving.value = true
+  formError.value = ''
+  try {
+    const result = editing.value
+      ? await update(editing.value.id, draft)
+      : await create(draft)
+    if (result === null) {
+      formError.value = '保存失败，请稍后重试'
+      return
+    }
+    dialogOpen.value = false
+    editing.value = null
+  } catch {
+    formError.value = '保存失败，请稍后重试'
+  } finally {
+    saving.value = false
   }
 }
 
@@ -310,7 +327,7 @@ watch(notes, (list) => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex flex-col gap-2 px-6 py-4">
+    <div class="flex shrink-0 flex-col gap-2 px-6 py-4">
       <div class="flex items-center justify-between gap-3">
         <div class="relative w-full max-w-xs transition-all duration-200">
           <Search
@@ -527,7 +544,7 @@ watch(notes, (list) => {
       </p>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-6 pb-6">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-6 pt-2 pb-6">
       <div
         v-if="filteredNotes.length === 0"
         class="empty-state text-muted-foreground h-full"
@@ -557,6 +574,8 @@ watch(notes, (list) => {
       v-model:open="dialogOpen"
       :note="editing"
       :categories="categoryNames"
+      :saving="saving"
+      :error="formError"
       @submit="handleSubmit"
     />
   </div>

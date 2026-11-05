@@ -320,7 +320,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col gap-4 overflow-y-auto p-5">
+  <div class="flex h-full scroll-py-5 flex-col gap-4 overflow-y-auto p-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-2">
         <LoaderCircle

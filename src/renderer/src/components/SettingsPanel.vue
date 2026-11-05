@@ -137,7 +137,7 @@ const handleCheckUpdate = (): void => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto">
+  <div class="h-full scroll-py-4 overflow-y-auto">
     <div
       v-if="settings"
       class="stagger-list mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6"

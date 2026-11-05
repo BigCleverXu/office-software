@@ -202,6 +202,31 @@ describe('AlarmScheduler', () => {
     expect(onFire).toHaveBeenCalledTimes(2)
   })
 
+  it('第一条提醒的 onFire 抛错时，第二条仍被触发', () => {
+    const fired: string[] = []
+    const onFire = vi.fn((alarm: Alarm) => {
+      if (alarm.id === 'broken') {
+        throw new Error('onFire failed')
+      }
+      fired.push(alarm.id)
+    })
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    const broken = makeAlarm({ id: 'broken', time: '07:30', repeat: 'daily' })
+    const healthy = makeAlarm({ id: 'healthy', time: '07:30', repeat: 'daily' })
+    const scheduler = new AlarmScheduler(() => [broken, healthy], onFire)
+
+    scheduler.check(monday)
+
+    expect(onFire).toHaveBeenCalledTimes(2)
+    expect(onFire).toHaveBeenLastCalledWith(healthy, monday)
+    expect(fired).toEqual(['healthy'])
+    expect(errorSpy).toHaveBeenCalled()
+
+    errorSpy.mockRestore()
+  })
+
   it('未启用或时间不匹配时不触发', () => {
     const onFire = vi.fn()
     const disabled = makeAlarm({ time: '07:30', enabled: false })

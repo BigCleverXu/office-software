@@ -168,9 +168,22 @@ function createWindow(): void {
   win.on('show', flushPendingUpdate)
   win.on('restore', flushPendingUpdate)
 
+  // 仅允许在系统浏览器打开 http(s) 链接，其余协议（file:、app-file: 等）一律拒绝
   win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    try {
+      const { protocol } = new URL(details.url)
+      if (protocol === 'http:' || protocol === 'https:') {
+        void shell.openExternal(details.url)
+      }
+    } catch {
+      // 非法 URL：直接拒绝
+    }
     return { action: 'deny' }
+  })
+
+  // 单页应用不需要页面级导航，阻止渲染窗口跳转到任何外部地址
+  win.webContents.on('will-navigate', (event) => {
+    event.preventDefault()
   })
 
   // HMR for renderer base on electron-vite cli.

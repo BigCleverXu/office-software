@@ -130,14 +130,16 @@ const handleReveal = async (entry: FileEntry): Promise<void> => {
 }
 
 const handleRescan = async (): Promise<void> => {
-  await rescan()
-  showHint('已发起重新扫描')
+  const ok = await rescan()
+  showHint(ok ? '已发起重新扫描' : '重新扫描失败')
 }
 
 const handleAddRoots = async (): Promise<void> => {
   const added = await addRoots()
   if (added) {
     showHint('已添加搜索目录，正在后台扫描')
+  } else {
+    showHint('添加目录失败')
   }
 }
 
@@ -175,7 +177,7 @@ onMounted(() => {
 
 <template>
   <div ref="panelRef" class="flex h-full flex-col">
-    <div class="flex flex-col gap-3 px-6 py-4">
+    <div class="flex shrink-0 flex-col gap-3 px-6 py-4">
       <div class="flex items-center justify-between gap-3">
         <div class="relative w-full max-w-sm">
           <Search
@@ -260,7 +262,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-3 pb-6">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-3 pt-2 pb-6">
       <FileResultList
         v-if="hasKeyword && result.entries.length > 0"
         :entries="result.entries"

@@ -170,7 +170,7 @@ const handleRescan = async (): Promise<void> => {
   <div class="flex h-full flex-col">
     <QuickSiteGroupSection />
 
-    <div class="flex flex-col gap-2 px-6 py-4">
+    <div class="flex shrink-0 flex-col gap-2 px-6 py-4">
       <div class="flex items-center justify-between gap-3">
         <div class="relative w-full max-w-xs">
           <Search
@@ -198,7 +198,7 @@ const handleRescan = async (): Promise<void> => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-6 pb-6">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-6 pt-2 pb-6">
       <div
         v-if="sites.length === 0"
         class="empty-state text-muted-foreground h-full"

@@ -4,6 +4,10 @@ import type { NoteDraft } from '../../src/shared/notes'
 import { closeDatabase, openDatabase } from '../../src/main/database'
 import { NoteStore } from '../../src/main/note-store'
 
+/** UUID v4 格式（node:crypto randomUUID 的输出） */
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 let db: DatabaseSync
 let store: NoteStore
 
@@ -46,10 +50,19 @@ describe('NoteStore.create', () => {
   it('返回完整便签，createdAt 与 updatedAt 相同', () => {
     const note = store.create(makeDraft())
 
-    expect(note.id).toBeTruthy()
+    expect(note.id).toMatch(UUID_V4)
     expect(typeof note.createdAt).toBe('number')
     expect(note.createdAt).toBe(note.updatedAt)
     expect(store.getAll()).toEqual([note])
+  })
+
+  it('多次创建的 id 均为 UUID v4 且互不相同', () => {
+    const first = store.create(makeDraft({ title: 'A' }))
+    const second = store.create(makeDraft({ title: 'B' }))
+
+    expect(first.id).toMatch(UUID_V4)
+    expect(second.id).toMatch(UUID_V4)
+    expect(first.id).not.toBe(second.id)
   })
 
   it('全部字段正确持久化', () => {

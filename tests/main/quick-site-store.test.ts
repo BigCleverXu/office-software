@@ -4,6 +4,10 @@ import type { QuickSiteDraft } from '../../src/shared/quick-sites'
 import { closeDatabase, openDatabase } from '../../src/main/database'
 import { QuickSiteStore } from '../../src/main/quick-site-store'
 
+/** UUID v4 格式（node:crypto randomUUID 的输出） */
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 let db: DatabaseSync
 let store: QuickSiteStore
 
@@ -63,9 +67,18 @@ describe('QuickSiteStore.create', () => {
       targets: [{ browserId: 'system', profileId: '' }],
       sortOrder: 0
     })
-    expect(result.site?.id).toBeTruthy()
+    expect(result.site?.id).toMatch(UUID_V4)
     expect(result.site?.createdAt).toBe(result.site?.updatedAt)
     expect(store.getAll()).toEqual([result.site])
+  })
+
+  it('两次创建生成不同的 UUID v4 id', () => {
+    const first = store.create(makeDraft({ name: 'A', url: 'a.com' }))
+    const second = store.create(makeDraft({ name: 'B', url: 'b.com' }))
+
+    expect(first.site?.id).toMatch(UUID_V4)
+    expect(second.site?.id).toMatch(UUID_V4)
+    expect(first.site?.id).not.toBe(second.site?.id)
   })
 
   it('名称留空时回退为去掉 www. 的域名', () => {

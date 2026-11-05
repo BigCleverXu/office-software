@@ -83,7 +83,7 @@ watch(
       :key="row.entry.path"
       ref="rowRefs"
       type="button"
-      class="group hover:bg-muted/60 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors"
+      class="group hover:bg-muted/60 flex w-full scroll-mt-2 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors"
       :class="{
         'bg-primary/10 ring-primary/30 ring-1': index === selectedIndex
       }"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Loader2 } from 'lucide-vue-next'
 import { NOTE_COLORS } from '@shared/notes'
 import type { Note, NoteColor, NoteDraft } from '@shared/notes'
 import { Button } from '@/components/ui/button'
@@ -17,10 +18,18 @@ import { Switch } from '@/components/ui/switch'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = defineProps<{
-  note?: Note | null
-  categories?: string[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    note?: Note | null
+    categories?: string[]
+    saving?: boolean
+    error?: string
+  }>(),
+  {
+    saving: false,
+    error: ''
+  }
+)
 
 const emit = defineEmits<{ submit: [draft: NoteDraft] }>()
 
@@ -33,7 +42,8 @@ const pinned = ref(false)
 const isEdit = computed(() => Boolean(props.note))
 
 const canSave = computed(
-  () => title.value.trim() !== '' || content.value.trim() !== ''
+  () =>
+    (title.value.trim() !== '' || content.value.trim() !== '') && !props.saving
 )
 
 /** 颜色按钮对应的圆点样式与无障碍文案（显式映射） */
@@ -81,7 +91,6 @@ const handleSubmit = (): void => {
     color: color.value,
     pinned: pinned.value
   })
-  open.value = false
 }
 </script>
 
@@ -184,11 +193,16 @@ const handleSubmit = (): void => {
           <Label for="note-pinned" class="cursor-pointer">置顶便签</Label>
           <Switch id="note-pinned" v-model="pinned" />
         </div>
+
+        <p v-if="error" class="text-destructive text-xs">{{ error }}</p>
       </div>
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="!canSave" @click="handleSubmit">保存</Button>
+        <Button :disabled="!canSave" @click="handleSubmit">
+          <Loader2 v-if="saving" class="animate-spin" aria-hidden="true" />
+          {{ saving ? '保存中' : '保存' }}
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

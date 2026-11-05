@@ -162,7 +162,7 @@ const handleGroupSubmit = async (draft: QuickSiteGroupDraft): Promise<void> => {
 
     <div
       v-if="groups.length > 0"
-      class="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] max-h-60 overflow-y-auto pr-1"
+      class="mt-3 grid max-h-60 scroll-py-2 gap-3 overflow-y-auto pr-1 pt-2 min-h-0 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]"
     >
       <QuickSiteGroupCard
         v-for="group in groups"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Loader2 } from 'lucide-vue-next'
 import type {
   Alarm,
   AlarmDraft,
@@ -32,7 +33,17 @@ import { INTERVAL_LIMITS, INTERVAL_UNIT_OPTIONS } from '@shared/interval'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = defineProps<{ alarm?: Alarm | null }>()
+const props = withDefaults(
+  defineProps<{
+    alarm?: Alarm | null
+    saving?: boolean
+    error?: string
+  }>(),
+  {
+    saving: false,
+    error: ''
+  }
+)
 
 const emit = defineEmits<{ submit: [draft: AlarmDraft] }>()
 
@@ -43,7 +54,8 @@ const weekdays = ref<Weekday[]>([])
 const intervalValue = ref(30)
 const intervalUnit = ref<IntervalUnit>('minutes')
 const enabled = ref(true)
-const error = ref('')
+/** 表单字段校验提示，与父级传入的提交错误分开 */
+const validationError = ref('')
 
 const isEdit = computed(() => Boolean(props.alarm))
 
@@ -56,7 +68,7 @@ watch(open, (isOpen) => {
   intervalValue.value = props.alarm?.intervalValue || 30
   intervalUnit.value = props.alarm?.intervalUnit ?? 'minutes'
   enabled.value = props.alarm?.enabled ?? true
-  error.value = ''
+  validationError.value = ''
 })
 
 const isWeekly = computed(() => repeat.value === 'weekly')
@@ -73,22 +85,22 @@ const toggleWeekday = (value: Weekday): void => {
 
 const handleSubmit = (): void => {
   if (!label.value.trim()) {
-    error.value = '请输入提醒内容'
+    validationError.value = '请输入提醒内容'
     return
   }
   if (isInterval.value) {
     const value = intervalValue.value
     const { min, max } = INTERVAL_LIMITS[intervalUnit.value]
     if (!Number.isInteger(value) || value < min || value > max) {
-      error.value = `间隔需为 ${min} 到 ${max} 之间的整数`
+      validationError.value = `间隔需为 ${min} 到 ${max} 之间的整数`
       return
     }
   } else if (!time.value) {
-    error.value = '请选择提醒时间'
+    validationError.value = '请选择提醒时间'
     return
   }
   if (isWeekly.value && weekdays.value.length === 0) {
-    error.value = '请至少选择一个星期'
+    validationError.value = '请至少选择一个星期'
     return
   }
 
@@ -101,7 +113,6 @@ const handleSubmit = (): void => {
     intervalUnit: isInterval.value ? intervalUnit.value : 'minutes',
     enabled: enabled.value
   })
-  open.value = false
 }
 </script>
 
@@ -207,12 +218,18 @@ const handleSubmit = (): void => {
           <Switch id="alarm-enabled" v-model="enabled" />
         </div>
 
+        <p v-if="validationError" class="text-destructive text-sm">
+          {{ validationError }}
+        </p>
         <p v-if="error" class="text-destructive text-sm">{{ error }}</p>
       </div>
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">取消</Button>
-        <Button @click="handleSubmit">保存</Button>
+        <Button :disabled="saving" @click="handleSubmit">
+          <Loader2 v-if="saving" class="animate-spin" aria-hidden="true" />
+          {{ saving ? '保存中' : '保存' }}
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

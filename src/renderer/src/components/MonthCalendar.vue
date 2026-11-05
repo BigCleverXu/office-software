@@ -191,7 +191,8 @@ function hiddenCountdownCount(date: string): number {
 /** 倒计日条目基础样式：单项一行，左侧小圆点 + 浅色底 */
 const COUNTDOWN_ITEM_CLASS = [
   'flex w-full min-w-0 cursor-pointer items-center gap-1 rounded px-1',
-  'text-[10px] leading-4'
+  'text-[10px] leading-4',
+  'focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none'
 ]
 
 /** 倒计日条目样式：选中态用前景色浅底，普通态用主色浅底 */
@@ -244,6 +245,11 @@ function handleCellClick(cell: MonthCell): void {
     }
   }
   emit('select', cell)
+}
+
+/** 打开倒计日：点击与键盘共用同一逻辑 */
+function openCountdown(countdown: Countdown): void {
+  emit('open-countdown', countdown)
 }
 
 /** 单元格样式：补位、周末、今天、选中分别为独立静态类名 */
@@ -352,8 +358,13 @@ function cellClass(cell: MonthCell, index: number): string[] {
           <span
             v-for="item in visibleCountdownsOf(cell.date)"
             :key="item.id"
+            role="button"
+            tabindex="0"
+            :aria-label="`查看倒计日 ${item.title}`"
             :class="countdownClass(cell)"
-            @click.stop="emit('open-countdown', item)"
+            @click.stop="openCountdown(item)"
+            @keydown.enter.prevent="openCountdown(item)"
+            @keydown.space.prevent="openCountdown(item)"
           >
             <span
               class="size-1 shrink-0 rounded-full bg-current opacity-60"

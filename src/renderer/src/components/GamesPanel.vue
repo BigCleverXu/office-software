@@ -44,7 +44,10 @@ const backToList = (): void => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div v-show="activeGameId === null" class="flex flex-col gap-2 px-6 py-4">
+    <div
+      v-show="activeGameId === null"
+      class="flex shrink-0 flex-col gap-2 px-6 py-4"
+    >
       <div class="flex items-center justify-between gap-3">
         <p class="text-muted-foreground text-sm">
           共
@@ -61,7 +64,7 @@ const backToList = (): void => {
     <!-- 列表用 v-show 保留滚动位置，返回后仍停留在原处 -->
     <div
       v-show="activeGameId === null"
-      class="flex-1 overflow-y-auto px-6 pb-6"
+      class="min-h-0 flex-1 overflow-y-auto scroll-py-2 px-6 pt-2 pb-6"
     >
       <div
         v-if="GAMES.length === 0"
@@ -128,7 +131,7 @@ const backToList = (): void => {
         </span>
       </div>
 
-      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-py-2">
         <component :is="activeGame.component" class="min-h-0 flex-1" />
       </div>
     </div>

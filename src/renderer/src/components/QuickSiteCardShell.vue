@@ -54,7 +54,7 @@ const handleKeydown = (event: KeyboardEvent): void => {
   >
     <slot />
 
-    <div class="absolute top-2 right-2">
+    <div class="absolute top-2 right-2" @click.stop>
       <div
         v-if="opening"
         class="text-muted-foreground flex size-6 items-center justify-center"

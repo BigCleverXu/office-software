@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Loader2 } from 'lucide-vue-next'
 import { COUNTDOWN_TITLE_MAX_LENGTH, isDateOnly } from '@shared/calendar'
 import type { Countdown, CountdownDraft } from '@shared/calendar'
 import { Button } from '@/components/ui/button'
@@ -16,10 +17,18 @@ import { Label } from '@/components/ui/label'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = defineProps<{
-  countdown?: Countdown | null
-  defaultDate?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    countdown?: Countdown | null
+    defaultDate?: string
+    saving?: boolean
+    error?: string
+  }>(),
+  {
+    saving: false,
+    error: ''
+  }
+)
 
 const emit = defineEmits<{ submit: [draft: CountdownDraft] }>()
 
@@ -37,7 +46,7 @@ const dateError = computed(() =>
 )
 
 const canSave = computed(
-  () => titleError.value === '' && dateError.value === ''
+  () => titleError.value === '' && dateError.value === '' && !props.saving
 )
 
 /** 按本地时区格式化为 YYYY-MM-DD */
@@ -72,7 +81,6 @@ const handleSubmit = (): void => {
     title: title.value.trim(),
     date: date.value
   })
-  open.value = false
 }
 </script>
 
@@ -115,11 +123,16 @@ const handleSubmit = (): void => {
             {{ dateError }}
           </p>
         </div>
+
+        <p v-if="error" class="text-destructive text-xs">{{ error }}</p>
       </div>
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">取消</Button>
-        <Button :disabled="!canSave" @click="handleSubmit">保存</Button>
+        <Button :disabled="!canSave" @click="handleSubmit">
+          <Loader2 v-if="saving" class="animate-spin" aria-hidden="true" />
+          {{ saving ? '保存中' : '保存' }}
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useTimeoutFn } from '@vueuse/core'
 import { RefreshCw } from 'lucide-vue-next'
 import {
   codeFromSymbol,
@@ -34,6 +35,22 @@ const {
 const dialogOpen = ref(false)
 const watchPanelRef = ref<InstanceType<typeof WatchPanel> | null>(null)
 
+/** 写操作失败提示，3 秒后自动清除 */
+const notice = ref('')
+
+const { start: startNoticeTimer } = useTimeoutFn(
+  () => {
+    notice.value = ''
+  },
+  3000,
+  { immediate: false }
+)
+
+const showNotice = (message: string): void => {
+  notice.value = message
+  startNoticeTimer()
+}
+
 /** 当前市场展示的快照与自选股 */
 const activeSnapshot = computed(() =>
   region.value === 'us' ? usSnapshot.value : snapshot.value
@@ -51,7 +68,9 @@ const openAddDialog = (): void => {
 }
 
 const onTogglePaused = (paused: boolean): void => {
-  void setPaused(paused)
+  void setPaused(paused).then((ok) => {
+    if (!ok) showNotice('暂停刷新失败，请稍后重试')
+  })
 }
 
 const handleRefresh = (): void => {
@@ -59,7 +78,9 @@ const handleRefresh = (): void => {
 }
 
 const handleRegionChange = (next: MarketRegion): void => {
-  void setRegion(next)
+  void setRegion(next).then((ok) => {
+    if (!ok) showNotice('切换市场失败，请稍后重试')
+  })
 }
 
 /**
@@ -90,7 +111,9 @@ const handleRemove = async (symbol: string): Promise<void> => {
     confirmText: '删除'
   })
   if (confirmed) {
-    void removeWatch(symbol)
+    void removeWatch(symbol).then((ok) => {
+      if (!ok) showNotice('删除自选失败，请稍后重试')
+    })
   }
 }
 
@@ -101,7 +124,7 @@ const handleRetry = (): void => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-y-auto scroll-py-2">
       <div class="flex flex-col gap-4 px-6 py-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <MarketSwitch :region="region" @update:region="handleRegionChange" />
@@ -118,6 +141,8 @@ const handleRetry = (): void => {
             </Button>
           </div>
         </div>
+
+        <p v-if="notice" class="text-destructive text-xs">{{ notice }}</p>
 
         <div class="stagger-list grid grid-cols-2 gap-3 lg:grid-cols-4">
           <IndexCard

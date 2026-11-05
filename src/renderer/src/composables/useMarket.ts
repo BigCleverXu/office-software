@@ -20,11 +20,11 @@ interface UseMarket {
   region: ComputedRef<MarketRegion>
   loaded: Ref<boolean>
   addWatch: (code: string) => Promise<AddWatchResult>
-  removeWatch: (symbol: string) => Promise<void>
+  removeWatch: (symbol: string) => Promise<boolean>
   refreshNow: () => Promise<void>
-  setPaused: (paused: boolean) => Promise<void>
+  setPaused: (paused: boolean) => Promise<boolean>
   setLastPage: (page: AppModuleId) => Promise<void>
-  setRegion: (region: MarketRegion) => Promise<void>
+  setRegion: (region: MarketRegion) => Promise<boolean>
 }
 
 /** 首次加载且尚未拿到数据时的初始快照 */
@@ -96,15 +96,29 @@ export function useMarket(): UseMarket {
     return result
   }
 
-  const removeWatch = async (symbol: string): Promise<void> => {
-    watchlist.value = await window.api.market.removeWatch(symbol)
+  const removeWatch = async (symbol: string): Promise<boolean> => {
+    const previous = watchlist.value
+    try {
+      watchlist.value = await window.api.market.removeWatch(symbol)
+      return true
+    } catch {
+      watchlist.value = previous
+      return false
+    }
   }
 
   const refreshNow = (): Promise<void> => window.api.market.refreshNow()
 
-  const setPaused = async (paused: boolean): Promise<void> => {
+  const setPaused = async (paused: boolean): Promise<boolean> => {
+    const previous = settings.value
     settings.value = { ...settings.value, paused }
-    await window.api.market.setPaused(paused)
+    try {
+      await window.api.market.setPaused(paused)
+      return true
+    } catch {
+      settings.value = previous
+      return false
+    }
   }
 
   const setLastPage = async (page: AppModuleId): Promise<void> => {
@@ -112,9 +126,16 @@ export function useMarket(): UseMarket {
     await window.api.market.setLastPage(page)
   }
 
-  const setRegion = async (next: MarketRegion): Promise<void> => {
+  const setRegion = async (next: MarketRegion): Promise<boolean> => {
+    const previous = settings.value
     settings.value = { ...settings.value, region: next }
-    await window.api.market.setRegion(next)
+    try {
+      await window.api.market.setRegion(next)
+      return true
+    } catch {
+      settings.value = previous
+      return false
+    }
   }
 
   onMounted(async () => {
