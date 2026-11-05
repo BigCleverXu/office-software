@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import dayjs from 'dayjs'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RefreshCw, SlidersHorizontal } from 'lucide-vue-next'
 import { NEWS_PLATFORMS } from '@shared/news'
@@ -54,10 +55,7 @@ const rightColumn = computed(() =>
 /** 更新时间文案：HH:mm，尚未拉取时显示 -- */
 const updatedLabel = computed(() => {
   if (updatedAt.value === 0) return '--'
-  return new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(new Date(updatedAt.value))
+  return dayjs(updatedAt.value).format('HH:mm')
 })
 
 /** 首次加载且无任何数据时展示骨架卡片 */

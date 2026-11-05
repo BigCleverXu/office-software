@@ -22,6 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger
 } from '@/components/ui/tooltip'
+import { confirm } from '@/composables/useConfirm'
 import { useNotes } from '@/composables/useNotes'
 
 const {
@@ -177,9 +178,12 @@ const handleTogglePin = (note: Note): void => {
   })
 }
 
-const handleRemove = (note: Note): void => {
+const handleRemove = async (note: Note): Promise<void> => {
   const name = note.title.trim() || '无标题'
-  const confirmed = window.confirm(`确定删除便签「${name}」吗？`)
+  const confirmed = await confirm({
+    title: '删除便签',
+    description: `确定删除便签「${name}」吗？`
+  })
   if (confirmed) {
     void remove(note.id)
   }
@@ -268,9 +272,12 @@ const commitRename = async (): Promise<void> => {
     return
   }
   if (categoryNames.value.includes(next)) {
-    const confirmed = window.confirm(
-      `已存在分类「${next}」，重命名后将合并为同一分类，继续？`
-    )
+    const confirmed = await confirm({
+      title: '合并分类',
+      description: `已存在分类「${next}」，重命名后将合并为同一分类，继续？`,
+      confirmText: '继续',
+      destructive: false
+    })
     if (!confirmed) return
   }
   await renameCategory(current, next)
@@ -285,9 +292,10 @@ const handleRemoveCategory = async (): Promise<void> => {
   if (current === null || current === '') return
   const count =
     categoryOptions.value.find((option) => option.name === current)?.count ?? 0
-  const confirmed = window.confirm(
-    `删除分类「${current}」？该分类下 ${count} 条便签将变为未分类。`
-  )
+  const confirmed = await confirm({
+    title: '删除分类',
+    description: `删除分类「${current}」？该分类下 ${count} 条便签将变为未分类。`
+  })
   if (!confirmed) return
   await removeCategory(current)
   await refresh()

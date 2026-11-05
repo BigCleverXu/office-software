@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import dayjs from 'dayjs'
 import { computed } from 'vue'
 import { Check, Pencil, Pin, PinOff, Tag, Trash2 } from 'lucide-vue-next'
 import type { Note, NoteColor } from '@shared/notes'
@@ -81,25 +82,15 @@ const pinActionLabel = computed(() => (props.note.pinned ? '取消置顶' : '置
 
 /** 更新时间文案：当天显示时分，当年显示月日，跨年显示完整日期 */
 function formatUpdatedAt(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-
-  if (sameDay) {
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    return `今天 ${hours}:${minutes}`
+  const date = dayjs(timestamp)
+  const now = dayjs()
+  if (date.isSame(now, 'day')) {
+    return `今天 ${date.format('HH:mm')}`
   }
-
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  if (date.getFullYear() === now.getFullYear()) {
-    return `${month}月${day}日`
+  if (date.isSame(now, 'year')) {
+    return `${date.format('M月D日')}`
   }
-  return `${date.getFullYear()}年${month}月${day}日`
+  return date.format('YYYY年M月D日')
 }
 
 const updatedAtLabel = computed(() => formatUpdatedAt(props.note.updatedAt))

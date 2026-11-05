@@ -15,6 +15,7 @@ import DayDetailDialog from '@/components/DayDetailDialog.vue'
 import HolidayOverview from '@/components/HolidayOverview.vue'
 import MonthCalendar from '@/components/MonthCalendar.vue'
 import { Button } from '@/components/ui/button'
+import { confirm } from '@/composables/useConfirm'
 import { useCalendar } from '@/composables/useCalendar'
 
 /** Tab 视图标识 */
@@ -208,8 +209,11 @@ const handleSubmit = async (draft: CountdownDraft): Promise<void> => {
   }
 }
 
-const handleRemove = (countdown: Countdown): void => {
-  const confirmed = window.confirm(`确定删除倒计日「${countdown.title}」吗？`)
+const handleRemove = async (countdown: Countdown): Promise<void> => {
+  const confirmed = await confirm({
+    title: '删除倒计日',
+    description: `确定删除倒计日「${countdown.title}」吗？`
+  })
   if (confirmed) {
     void remove(countdown.id)
   }
@@ -238,10 +242,13 @@ const handleDetailEdit = (): void => {
 }
 
 /** 详情中删除：确认后删除并关闭详情，取消则保留详情弹窗 */
-const handleDetailRemove = (): void => {
+const handleDetailRemove = async (): Promise<void> => {
   const target = detailTarget.value
   if (!target) return
-  const confirmed = window.confirm(`确定删除倒计日「${target.title}」吗？`)
+  const confirmed = await confirm({
+    title: '删除倒计日',
+    description: `确定删除倒计日「${target.title}」吗？`
+  })
   if (!confirmed) return
   void remove(target.id)
   detailOpen.value = false

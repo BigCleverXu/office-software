@@ -1,5 +1,6 @@
 // 天气可视化映射：WMO 天气码 → 图标 / 文案 / 渐变，以及格式化工具
 
+import dayjs from 'dayjs'
 import type { Component } from 'vue'
 import {
   Cloud,
@@ -236,8 +237,5 @@ export function formatUpdatedAt(timestamp: number | null | undefined): string {
   if (diff >= 0 && diff < 60_000) {
     return '刚刚更新'
   }
-  const date = new Date(timestamp)
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  return `${hour}:${minute} 更新`
+  return `${dayjs(timestamp).format('HH:mm')} 更新`
 }

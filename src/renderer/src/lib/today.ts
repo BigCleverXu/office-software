@@ -1,9 +1,8 @@
+import dayjs from 'dayjs'
+
 /** 按本地时区格式化为 YYYY-MM-DD（月、日补零） */
 export function toDateKey(date: Date): string {
-  const year = String(date.getFullYear()).padStart(4, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return dayjs(date).format('YYYY-MM-DD')
 }
 
 /**

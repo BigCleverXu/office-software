@@ -6,6 +6,7 @@ import type { AppModuleId } from '@shared/navigation'
 import { DEFAULT_MODULE } from '@shared/navigation'
 import type { AppTheme } from '@shared/settings'
 import AppSidebar from '@/components/AppSidebar.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import UpdateCheckDialog from '@/components/UpdateCheckDialog.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -144,6 +145,9 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 全局确认弹窗：统一替代各面板的原生确认框 -->
+    <ConfirmDialog />
 
     <!-- 全局更新提示：任意模块页面均可弹出 -->
     <UpdateCheckDialog

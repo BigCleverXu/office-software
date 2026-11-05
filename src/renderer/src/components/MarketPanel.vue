@@ -13,6 +13,7 @@ import MarketSwitch from '@/components/MarketSwitch.vue'
 import WatchPanel from '@/components/WatchPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { confirm } from '@/composables/useConfirm'
 import { useMarket } from '@/composables/useMarket'
 
 const {
@@ -77,13 +78,17 @@ const handleAdd = async (code: string): Promise<AddWatchResult> => {
   return result
 }
 
-const handleRemove = (symbol: string): void => {
+const handleRemove = async (symbol: string): Promise<void> => {
   const item = watchlist.value.find((entry) => entry.symbol === symbol)
   const label = item
     ? `${item.name || item.code}（${item.code}）`
     : codeFromSymbol(symbol)
   const noun = region.value === 'us' ? '美股自选' : '自选股'
-  const confirmed = window.confirm(`确定删除${noun}「${label}」吗？`)
+  const confirmed = await confirm({
+    title: '删除自选',
+    description: `确定删除${noun}「${label}」吗？`,
+    confirmText: '删除'
+  })
   if (confirmed) {
     void removeWatch(symbol)
   }

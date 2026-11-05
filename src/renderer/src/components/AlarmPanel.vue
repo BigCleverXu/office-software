@@ -5,6 +5,7 @@ import type { Alarm, AlarmDraft } from '@shared/types'
 import AlarmCard from '@/components/AlarmCard.vue'
 import AlarmFormDialog from '@/components/AlarmFormDialog.vue'
 import { Button } from '@/components/ui/button'
+import { confirm } from '@/composables/useConfirm'
 import { useAlarms } from '@/composables/useAlarms'
 
 const { alarms, create, update, remove, toggle } = useAlarms()
@@ -38,8 +39,11 @@ const handleToggle = (alarm: Alarm, enabled: boolean): void => {
   void toggle(alarm.id, enabled)
 }
 
-const handleRemove = (alarm: Alarm): void => {
-  const confirmed = window.confirm(`确定删除提醒「${alarm.label}」吗？`)
+const handleRemove = async (alarm: Alarm): Promise<void> => {
+  const confirmed = await confirm({
+    title: '删除提醒',
+    description: `确定删除提醒「${alarm.label}」吗？`
+  })
   if (confirmed) {
     void remove(alarm.id)
   }

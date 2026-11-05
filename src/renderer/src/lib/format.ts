@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import type { Alarm, RepeatType, Weekday } from '@shared/types'
 import { formatIntervalLabel } from '@shared/interval'
 
@@ -43,9 +44,7 @@ export function repeatSummary(alarm: Alarm): string {
 
 /** 格式化为 'HH:mm'（补零） */
 function formatHM(date: Date): string {
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${hours}:${minutes}`
+  return dayjs(date).format('HH:mm')
 }
 
 /**

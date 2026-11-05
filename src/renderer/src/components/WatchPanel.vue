@@ -174,10 +174,6 @@ defineExpose({ highlight })
     >
       <span class="empty-state-icon"><LineChart class="size-6" /></span>
       <p class="text-sm">{{ copy.empty }}</p>
-      <Button @click="emit('add')">
-        <Plus />
-        {{ copy.add }}
-      </Button>
     </div>
 
     <div

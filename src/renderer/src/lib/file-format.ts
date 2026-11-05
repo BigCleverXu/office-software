@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import { formatBytes as formatSharedBytes } from '@shared/update'
 
 /** 文件名高亮分段：match 为真时按命中部分渲染 */
@@ -20,11 +21,6 @@ export function formatBytes(size: number): string {
   return formatSharedBytes(size)
 }
 
-/** 两位补零 */
-function pad2(value: number): string {
-  return String(value).padStart(2, '0')
-}
-
 /**
  * 本地时区 `YYYY-MM-DD HH:mm`。
  * 时间戳为 0 或非法值时返回占位符 `--`。
@@ -33,14 +29,7 @@ export function formatModifiedAt(timestamp: number): string {
   if (!Number.isFinite(timestamp) || timestamp <= 0) {
     return '--'
   }
-  const date = new Date(timestamp)
-  const datePart = [
-    date.getFullYear(),
-    pad2(date.getMonth() + 1),
-    pad2(date.getDate())
-  ].join('-')
-  const timePart = [pad2(date.getHours()), pad2(date.getMinutes())].join(':')
-  return `${datePart} ${timePart}`
+  return dayjs(timestamp).format('YYYY-MM-DD HH:mm')
 }
 
 /**

@@ -1,6 +1,11 @@
 // 快捷站点展示辅助：浏览器名称、常用站点、首字母与确定性配色
 
-import type { BrowserId } from '@shared/quick-sites'
+import type {
+  BrowserId,
+  DetectedBrowser,
+  QuickSite,
+  QuickSiteTarget
+} from '@shared/quick-sites'
 
 /** 浏览器标识对应的展示名称 */
 export const BROWSER_LABELS: Record<BrowserId, string> = {
@@ -93,4 +98,75 @@ function hashSeed(seed: string): number {
 export function siteAccent(seed: string): string {
   const index = hashSeed(seed) % SITE_ACCENTS.length
   return SITE_ACCENTS[index] ?? SITE_ACCENTS[0]
+}
+
+/** 单个打开方式的可读标签；warn 表示浏览器或角色不可用 */
+export interface SiteTargetLabel {
+  text: string
+  warn: boolean
+}
+
+/** 系统默认浏览器标识，与 shared 契约中的 SYSTEM_BROWSER_ID 一致 */
+const SYSTEM_BROWSER: BrowserId = 'system'
+
+/** 解析单个打开方式的可读标签 */
+export function resolveSiteTargetLabel(
+  target: QuickSiteTarget,
+  browsers: DetectedBrowser[]
+): SiteTargetLabel {
+  if (target.browserId === SYSTEM_BROWSER) {
+    return { text: BROWSER_LABELS.system, warn: false }
+  }
+  const browser = browsers.find((item) => item.id === target.browserId)
+  if (browser === undefined) {
+    return {
+      text: `${BROWSER_LABELS[target.browserId]}（不可用）`,
+      warn: true
+    }
+  }
+  if (target.profileId === '') {
+    return { text: `${browser.name} · 默认角色`, warn: false }
+  }
+  const profile = browser.profiles.find((item) => item.id === target.profileId)
+  if (profile === undefined) {
+    return { text: `${browser.name} · 角色（不可用）`, warn: true }
+  }
+  return { text: `${browser.name} · ${profile.name}`, warn: false }
+}
+
+/** 按站点打开方式顺序解析全部标签 */
+export function siteTargetLabels(
+  site: QuickSite,
+  browsers: DetectedBrowser[]
+): SiteTargetLabel[] {
+  return site.targets.map((target) => resolveSiteTargetLabel(target, browsers))
+}
+
+/** 底部目标徽标：单目标显示标签，多目标显示数量 */
+export function siteTargetBadge(
+  site: QuickSite,
+  browsers: DetectedBrowser[]
+): { text: string; title: string; warn: boolean } {
+  const labels = siteTargetLabels(site, browsers)
+  const first = labels[0]
+  if (labels.length === 1 && first) {
+    return { text: first.text, title: first.text, warn: first.warn }
+  }
+  return {
+    text: `${labels.length} 个打开方式`,
+    title: labels.map((label) => label.text).join('、'),
+    warn: labels.some((label) => label.warn)
+  }
+}
+
+/** 卡片 aria 文案：单目标列出名称，多目标只说明数量 */
+export function siteOpenAriaLabel(
+  site: QuickSite,
+  browsers: DetectedBrowser[]
+): string {
+  const labels = siteTargetLabels(site, browsers)
+  if (labels.length === 1) {
+    return `用 ${labels[0]?.text ?? ''} 打开 ${site.name}`
+  }
+  return `用 ${labels.length} 个打开方式打开 ${site.name}`
 }

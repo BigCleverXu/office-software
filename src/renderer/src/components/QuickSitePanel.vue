@@ -4,25 +4,17 @@ import {
   AlertCircle,
   CheckCircle2,
   Globe,
-  Layers,
   Plus,
   Search,
   SearchX
 } from 'lucide-vue-next'
-import type {
-  OpenQuickSiteGroupResult,
-  QuickSite,
-  QuickSiteDraft,
-  QuickSiteGroup,
-  QuickSiteGroupDraft
-} from '@shared/quick-sites'
+import type { QuickSite, QuickSiteDraft } from '@shared/quick-sites'
 import QuickSiteCard from '@/components/QuickSiteCard.vue'
 import QuickSiteFormDialog from '@/components/QuickSiteFormDialog.vue'
-import QuickSiteGroupCard from '@/components/QuickSiteGroupCard.vue'
-import QuickSiteGroupFormDialog from '@/components/QuickSiteGroupFormDialog.vue'
+import QuickSiteGroupSection from '@/components/QuickSiteGroupSection.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useQuickSiteGroups } from '@/composables/useQuickSiteGroups'
+import { confirm } from '@/composables/useConfirm'
 import { useQuickSites } from '@/composables/useQuickSites'
 import { QUICK_SITE_PRESETS, type QuickSitePreset } from '@/lib/site-visuals'
 
@@ -38,18 +30,8 @@ const {
   open
 } = useQuickSites()
 
-const {
-  groups,
-  refresh: refreshGroups,
-  create: createGroup,
-  update: updateGroup,
-  remove: removeGroup,
-  open: openGroup
-} = useQuickSiteGroups()
-
 onMounted(() => {
   void refresh()
-  void refreshGroups()
   void refreshBrowsers()
 })
 
@@ -124,7 +106,10 @@ const handleOpenSite = async (site: QuickSite): Promise<void> => {
 }
 
 const handleRemoveSite = async (site: QuickSite): Promise<void> => {
-  const confirmed = window.confirm(`删除站点「${site.name}」？`)
+  const confirmed = await confirm({
+    title: '删除站点',
+    description: `删除站点「${site.name}」？`
+  })
   if (!confirmed) {
     return
   }
@@ -132,94 +117,6 @@ const handleRemoveSite = async (site: QuickSite): Promise<void> => {
     await remove(site.id)
   } catch {
     showToast('error', '删除失败')
-  }
-}
-
-const openingGroupId = ref<string | null>(null)
-
-/** 汇总打开编组的结果：成功 / 回退 / 失败分别计数并追加提示 */
-const showGroupOpenToast = (result: OpenQuickSiteGroupResult): void => {
-  const parts: string[] = []
-  if (result.opened > 0) {
-    parts.push(`已打开 ${result.opened} 个窗口`)
-  }
-  if (result.fallback > 0) {
-    parts.push(`${result.fallback} 个回退到系统默认`)
-  }
-  if (result.failed > 0) {
-    parts.push(`${result.failed} 个打开失败`)
-  }
-  const summary = parts.length > 0 ? parts.join('，') : '未能打开网站'
-  const detail = result.errors?.[0]
-  const kind: ToastKind =
-    result.opened === 0 || result.failed > 0 ? 'error' : 'success'
-  showToast(
-    kind,
-    kind === 'error' && detail ? `${summary}：${detail}` : summary
-  )
-}
-
-const handleOpenGroup = async (group: QuickSiteGroup): Promise<void> => {
-  if (openingGroupId.value !== null) {
-    return
-  }
-  openingGroupId.value = group.id
-  try {
-    const result = await openGroup(group.id)
-    showGroupOpenToast(result)
-  } catch {
-    showToast('error', '打开失败')
-  } finally {
-    openingGroupId.value = null
-  }
-}
-
-const handleRemoveGroup = async (group: QuickSiteGroup): Promise<void> => {
-  const confirmed = window.confirm(`删除编组「${group.name}」？`)
-  if (!confirmed) {
-    return
-  }
-  try {
-    await removeGroup(group.id)
-  } catch {
-    showToast('error', '删除失败')
-  }
-}
-
-const groupFormOpen = ref(false)
-const editingGroup = ref<QuickSiteGroup | null>(null)
-const groupFormError = ref('')
-const groupSaving = ref(false)
-
-const openGroupCreateDialog = (): void => {
-  editingGroup.value = null
-  groupFormError.value = ''
-  groupFormOpen.value = true
-}
-
-const openGroupEditDialog = (group: QuickSiteGroup): void => {
-  editingGroup.value = group
-  groupFormError.value = ''
-  groupFormOpen.value = true
-}
-
-const handleGroupSubmit = async (draft: QuickSiteGroupDraft): Promise<void> => {
-  groupSaving.value = true
-  groupFormError.value = ''
-  try {
-    const result = editingGroup.value
-      ? await updateGroup(editingGroup.value.id, draft)
-      : await createGroup(draft)
-    if (result.ok) {
-      groupFormOpen.value = false
-      editingGroup.value = null
-    } else {
-      groupFormError.value = result.error ?? '保存失败'
-    }
-  } catch {
-    groupFormError.value = '保存失败'
-  } finally {
-    groupSaving.value = false
   }
 }
 
@@ -271,54 +168,7 @@ const handleRescan = async (): Promise<void> => {
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="shrink-0 px-6 pt-5">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <h2 class="text-sm font-semibold">编组</h2>
-          <span class="text-muted-foreground text-xs">
-            {{ groups.length }} 个编组
-          </span>
-        </div>
-        <Button variant="outline" size="sm" @click="openGroupCreateDialog">
-          <Plus data-icon="inline-start" />
-          新建编组
-        </Button>
-      </div>
-
-      <div
-        v-if="groups.length > 0"
-        class="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] max-h-60 overflow-y-auto pr-1"
-      >
-        <QuickSiteGroupCard
-          v-for="group in groups"
-          :key="group.id"
-          :group="group"
-          :site-count="group.siteIds.length"
-          :opening="openingGroupId === group.id"
-          @open="handleOpenGroup(group)"
-          @edit="openGroupEditDialog(group)"
-          @remove="handleRemoveGroup(group)"
-        />
-      </div>
-
-      <div
-        v-else
-        class="mt-3 flex items-center gap-3 rounded-xl border border-dashed px-3.5 py-3"
-      >
-        <span
-          class="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg"
-          aria-hidden="true"
-        >
-          <Layers class="size-4" />
-        </span>
-        <p class="text-muted-foreground min-w-0 flex-1 text-xs">
-          把常一起打开的网站编成一组，一次点开全部
-        </p>
-        <Button variant="outline" size="xs" @click="openGroupCreateDialog">
-          新建编组
-        </Button>
-      </div>
-    </div>
+    <QuickSiteGroupSection />
 
     <div class="flex flex-col gap-2 px-6 py-4">
       <div class="flex items-center justify-between gap-3">
@@ -431,15 +281,6 @@ const handleRescan = async (): Promise<void> => {
       :error="formError"
       @submit="handleSubmit"
       @rescan="handleRescan"
-    />
-
-    <QuickSiteGroupFormDialog
-      v-model:open="groupFormOpen"
-      :group="editingGroup"
-      :sites="sites"
-      :saving="groupSaving"
-      :error="groupFormError"
-      @submit="handleGroupSubmit"
     />
   </div>
 </template>
