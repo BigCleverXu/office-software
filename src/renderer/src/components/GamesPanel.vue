@@ -5,25 +5,16 @@ import type { GameMeta } from '@/games/registry'
 import { GAMES, gameById } from '@/games/registry'
 import { Button } from '@/components/ui/button'
 
-/** 8×8 恐龙剪影栅格：true 为实心像素，false 为透明空格 */
-const DINO_THUMBNAIL: readonly (readonly boolean[])[] = [
-  [false, false, false, false, false, true, true, false],
-  [false, false, false, true, true, true, true, false],
-  [false, false, false, true, true, true, true, true],
-  [true, false, false, true, true, true, false, false],
-  [true, true, true, true, true, true, false, false],
-  [false, false, true, true, true, false, false, false],
-  [false, false, true, true, false, true, false, false],
-  [false, false, true, true, false, true, true, false]
-]
-
-/** 展平为一维单元格列表，模板中直接遍历 */
-const THUMBNAIL_CELLS = DINO_THUMBNAIL.flatMap((row, rowIndex) =>
-  row.map((filled, columnIndex) => ({
-    key: `${rowIndex}-${columnIndex}`,
-    filled
-  }))
-)
+/** 列表卡片数据：模块作用域预计算各游戏的缩略图单元格 */
+const GAME_CARDS = GAMES.map((game) => ({
+  ...game,
+  thumbnailCells: game.thumbnail.flatMap((row, rowIndex) =>
+    row.map((filled, columnIndex) => ({
+      key: `${rowIndex}-${columnIndex}`,
+      filled
+    }))
+  )
+}))
 
 /** 当前进入的游戏 id，null 表示停留在列表页 */
 const activeGameId = ref<string | null>(null)
@@ -76,7 +67,7 @@ const backToList = (): void => {
 
       <div v-else class="stagger-list grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <button
-          v-for="game in GAMES"
+          v-for="game in GAME_CARDS"
           :key="game.id"
           type="button"
           class="card-interactive shadow-soft flex w-full items-start gap-4 rounded-2xl border border-border/70 p-4 text-left"
@@ -90,7 +81,7 @@ const backToList = (): void => {
           >
             <div class="grid h-full w-full grid-cols-8 grid-rows-8 gap-px">
               <span
-                v-for="cell in THUMBNAIL_CELLS"
+                v-for="cell in game.thumbnailCells"
                 :key="cell.key"
                 :class="cell.filled ? 'bg-current' : ''"
               ></span>

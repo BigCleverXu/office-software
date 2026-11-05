@@ -2,6 +2,9 @@
 
 import type { Component } from 'vue'
 import DinoGame from '@/games/dino/DinoGame.vue'
+import { dinoThumbnail } from '@/games/dino/thumbnail'
+import FlappyGame from '@/games/flappy/FlappyGame.vue'
+import { flappyThumbnail } from '@/games/flappy/thumbnail'
 
 /** 单机游戏元信息 */
 export interface GameMeta {
@@ -15,6 +18,8 @@ export interface GameMeta {
   tags: readonly string[]
   /** 缩略图配色，Tailwind 类，如 'text-primary' */
   accent: string
+  /** 8×8 像素缩略图，true 为实心像素，false 为透明 */
+  thumbnail: readonly (readonly boolean[])[]
   /** 游戏组件，自身铺满父容器 */
   component: Component
 }
@@ -27,7 +32,17 @@ export const GAMES: readonly GameMeta[] = [
     subtitle: '像素风横向跑酷，躲避仙人掌与翼龙，看你能跑多远',
     tags: ['跑酷', '像素风', '单机'],
     accent: 'text-primary',
+    thumbnail: dinoThumbnail,
     component: DinoGame
+  },
+  {
+    id: 'flappy-bird',
+    title: '管道鸟',
+    subtitle: '点击拍翅穿过管道缝隙，撞到管子或地面就结束',
+    tags: ['休闲', '像素风', '单机'],
+    accent: 'text-weather-sun',
+    thumbnail: flappyThumbnail,
+    component: FlappyGame
   }
 ]
 
