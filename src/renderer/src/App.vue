@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useLocalStorage, usePreferredDark } from '@vueuse/core'
+import { useLocalStorage, usePreferredDark, useWindowSize } from '@vueuse/core'
 import { Loader2, Settings } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import { DEFAULT_MODULE } from '@shared/navigation'
@@ -18,6 +18,17 @@ import { MODULES, moduleById } from '@/lib/modules'
 const active = ref<AppModuleId>(DEFAULT_MODULE)
 const collapsed = useLocalStorage('reminder:sidebar-collapsed', false)
 const showSettings = ref(false)
+
+/** 窄屏阈值：低于该宽度时侧边栏强制收起，避免内容区被挤压 */
+const NARROW_WIDTH = 880
+
+const { width: viewportWidth } = useWindowSize()
+
+/** 自动收起只影响当前展示，不写回 localStorage 中的用户偏好 */
+const autoCollapsed = computed(() => viewportWidth.value < NARROW_WIDTH)
+
+/** 实际传给侧边栏的收起状态：用户偏好或自动收起任一为真即收起 */
+const sidebarCollapsed = computed(() => collapsed.value || autoCollapsed.value)
 
 const { settings } = useSettings()
 const {
@@ -104,7 +115,7 @@ onUnmounted(() => {
     <div class="flex h-full">
       <AppSidebar
         :active="active"
-        :collapsed="collapsed"
+        :collapsed="sidebarCollapsed"
         :settings-active="showSettings"
         @select="select"
         @settings="openSettings"
@@ -125,13 +136,15 @@ onUnmounted(() => {
             <h1 class="text-[15px] leading-tight font-semibold tracking-tight">
               {{ pageTitle }}
             </h1>
-            <p class="text-muted-foreground truncate text-[11px] leading-tight">
+            <p
+              class="text-muted-foreground hidden truncate text-[11px] leading-tight min-[880px]:block"
+            >
               {{ pageDescription }}
             </p>
           </div>
         </header>
 
-        <div class="app-canvas flex-1 overflow-hidden">
+        <div class="app-canvas min-w-0 flex-1 overflow-hidden">
           <SettingsPanel v-if="showSettings" class="animate-fade-in" />
           <template v-for="module in MODULES" :key="module.id">
             <Transition name="page">

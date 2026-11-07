@@ -1,0 +1,14 @@
+{
+  "code": 0,
+  "message": "0",
+  "data": {
+    "quality": 80,
+    "durl": [
+      {
+        "order": 1,
+        "url": "https://upos-sz-mirrorcos.bilivideo.com/video.flv",
+        "size": 12345678
+      }
+    ]
+  }
+}

@@ -7,3 +7,7 @@ node-compile-cache
 .eslintcache
 *.log*
 .trae/
+
+# ASR 内置二进制与模型（由 scripts/fetch-asr-assets.mjs 获取，不入库）
+resources/whisper/
+resources/ffmpeg/

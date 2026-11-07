@@ -20,3 +20,4 @@ export {
   registerQuickSiteGroupIpc,
   type QuickSiteGroupIpcDeps
 } from './quick-site-groups'
+export { registerVideoIpc, type VideoIpcDeps } from '../video/ipc'

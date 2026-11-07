@@ -1,0 +1,17 @@
+[
+  {
+    "id": "s1",
+    "reference": "今天天气很好",
+    "hypothesis": "今天天气很好"
+  },
+  {
+    "id": "s2",
+    "reference": "我们一起去公园散步吧",
+    "hypothesis": "我们一起去公园散心了"
+  },
+  {
+    "id": "s3",
+    "reference": "短视频口播提取测试样本",
+    "hypothesis": "短视频口播提去测式半木"
+  }
+]

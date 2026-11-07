@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Download, DownloadCloud, FolderOpen, Loader2 } from 'lucide-vue-next'
 import type { AppSettings, AppTheme } from '@shared/settings'
 import { DEFAULT_APP_SETTINGS } from '@shared/settings'
 import SettingsRow from '@/components/SettingsRow.vue'
+import VideoEngineForm from '@/components/VideoEngineForm.vue'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -22,6 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useSettings } from '@/composables/useSettings'
 import { useUpdateCheck } from '@/composables/useUpdateCheck'
+import { useVideo } from '@/composables/useVideo'
 
 const {
   settings,
@@ -37,6 +39,27 @@ const {
 } = useSettings()
 
 const { checking, check } = useUpdateCheck()
+
+const { loadEngine, engineSettings } = useVideo()
+
+/** 口播引擎表单实例，读取配置后刷新草稿 */
+const engineForm = ref<{ reset: () => void } | null>(null)
+
+/** 进入设置页时读取数据库中的最新引擎配置，再刷新表单草稿 */
+onMounted(async () => {
+  await loadEngine()
+  engineForm.value?.reset()
+})
+
+// 设置数据加载完成后表单才挂载，此时用已读取的引擎配置刷新草稿；
+// 保存成功后引擎配置变化也会同步回表单，保证两处入口展示一致。
+watch(
+  [engineForm, engineSettings],
+  () => {
+    engineForm.value?.reset()
+  },
+  { flush: 'post' }
+)
 
 /** 设置尚未加载时使用默认值渲染，读取控件值时不会取到 undefined */
 const current = computed<AppSettings>(
@@ -193,6 +216,18 @@ const handleCheckUpdate = (): void => {
               </SelectContent>
             </Select>
           </SettingsRow>
+        </CardContent>
+      </Card>
+
+      <Card class="shadow-soft">
+        <CardHeader>
+          <CardTitle>短视频</CardTitle>
+          <CardDescription>
+            口播引擎与下载目录，识别过程完全离线
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="flex flex-col">
+          <VideoEngineForm ref="engineForm" />
         </CardContent>
       </Card>
 

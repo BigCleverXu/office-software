@@ -1,0 +1,25 @@
+{
+  "item_list": [
+    {
+      "aweme_id": "7345678901234567892",
+      "desc": "旧接口视频",
+      "author": { "nickname": "旧接口作者" },
+      "video": {
+        "play_addr": {
+          "url_list": ["https://v3-web.douyinvod.com/play/video.mp4"]
+        },
+        "cover": {
+          "url_list": ["https://p3-pc-sign.douyinpic.com/old-cover.jpg"]
+        },
+        "duration": 6000,
+        "width": 720,
+        "height": 1280
+      },
+      "statistics": {
+        "digg_count": 10,
+        "comment_count": 2,
+        "collect_count": 1
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import {
   AlarmClock,
   CalendarDays,
   CloudSun,
+  Clapperboard,
   FolderSearch,
   Gamepad2,
   Globe,
@@ -21,6 +22,7 @@ import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
 import QuickSitePanel from '@/components/QuickSitePanel.vue'
+import VideoPanel from '@/components/VideoPanel.vue'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
@@ -73,6 +75,13 @@ export const MODULES: ModuleMeta[] = [
     description: '实时热点新闻，按平台聚合展示',
     icon: Newspaper,
     component: NewsPanel
+  },
+  {
+    id: 'video',
+    label: '短视频',
+    description: '解析抖音、快手、小红书与 B 站链接，下载视频或图文并提取口播',
+    icon: Clapperboard,
+    component: VideoPanel
   },
   {
     id: 'notes',

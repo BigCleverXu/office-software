@@ -83,6 +83,22 @@ import {
   type QuickSiteGroupSaveResult,
   type QuickSiteSaveResult
 } from '../shared/quick-sites'
+import {
+  VIDEO_CHANNELS,
+  type VideoActionResult,
+  type VideoApi,
+  type VideoDownloadProgress,
+  type VideoDownloadRequest,
+  type VideoDownloadSnapshot,
+  type VideoEngineProbe,
+  type VideoExportResult,
+  type VideoModuleSettings,
+  type VideoParseResult,
+  type VideoPickKind,
+  type VideoPickResult,
+  type VideoTranscriptRequest,
+  type VideoTranscriptSnapshot
+} from '../shared/video'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -437,6 +453,75 @@ const quickSites: QuickSiteApi = {
   }
 }
 
+// 暴露给渲染进程的短视频 API
+const video: VideoApi = {
+  parse: (input: string): Promise<VideoParseResult> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.parse, input),
+  download: (request: VideoDownloadRequest): Promise<VideoDownloadSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.download, request),
+  resetDownload: (): Promise<VideoDownloadSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.resetDownload),
+  cancelDownload: (): Promise<void> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.cancelDownload),
+  getDownloadState: (): Promise<VideoDownloadSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.downloadState),
+  onDownloadProgress: (
+    callback: (progress: VideoDownloadProgress) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: VideoDownloadProgress
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(VIDEO_CHANNELS.onDownloadProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(VIDEO_CHANNELS.onDownloadProgress, listener)
+    }
+  },
+  startTranscript: (
+    request: VideoTranscriptRequest
+  ): Promise<VideoTranscriptSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.transcriptStart, request),
+  cancelTranscript: (): Promise<void> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.transcriptCancel),
+  getTranscriptState: (): Promise<VideoTranscriptSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.transcriptState),
+  onTranscriptState: (
+    callback: (state: VideoTranscriptSnapshot) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: VideoTranscriptSnapshot
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(VIDEO_CHANNELS.onTranscriptState, listener)
+    return () => {
+      ipcRenderer.removeListener(VIDEO_CHANNELS.onTranscriptState, listener)
+    }
+  },
+  getEngineSettings: (): Promise<VideoModuleSettings> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.engineGetSettings),
+  updateEngineSettings: (
+    settings: VideoModuleSettings
+  ): Promise<VideoModuleSettings> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.engineUpdateSettings, settings),
+  probeEngine: (): Promise<VideoEngineProbe> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.engineProbe),
+  pickFile: (kind: VideoPickKind): Promise<VideoPickResult> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.pickFile, kind),
+  openFile: (filePath: string): Promise<VideoActionResult> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.openFile, filePath),
+  showInFolder: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.showInFolder, filePath),
+  exportText: (input: {
+    text: string
+    suggestedFileName: string
+  }): Promise<VideoExportResult> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.exportText, input)
+}
+
 const api = {
   alarms,
   market,
@@ -447,7 +532,8 @@ const api = {
   news,
   weather,
   files,
-  quickSites
+  quickSites,
+  video
 }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API

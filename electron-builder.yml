@@ -9,8 +9,18 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # ASR 二进制改由 extraResources 投递，避免在 asar 内重复打包
+  - '!resources/whisper/**'
+  - '!resources/ffmpeg/**'
+extraResources:
+  - from: resources/whisper
+    to: whisper
+  - from: resources/ffmpeg
+    to: ffmpeg
 asarUnpack:
+  # 图标等仍在 asar 内，运行时需要以真实文件路径读取，故保留解包
   - resources/**
+  - '**/node_modules/ffmpeg-static/**'
 win:
   executableName: reminder-app
 nsis:

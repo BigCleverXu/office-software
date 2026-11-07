@@ -43,6 +43,7 @@ import {
   registerQuickSiteIpc,
   registerSettingsIpc,
   registerUpdateIpc,
+  registerVideoIpc,
   registerWeatherIpc
 } from './ipc'
 import { fetchQuotes } from './quote-provider'
@@ -56,6 +57,12 @@ import { FileSearchService } from './file-search-service'
 import { createFileResponse, parseAppFilePath } from './file-protocol'
 import { FILE_SEARCH_CHANNELS } from '../shared/files'
 import { getIntervalMs } from '../shared/interval'
+import { VIDEO_CHANNELS } from '../shared/video'
+import { VideoEngineSettingsStore } from './video/engine-settings'
+import { VideoParseService } from './video/parse-service'
+import { VideoDownloader } from './video/downloader'
+import { VideoTranscriptService } from './video/transcript-service'
+import { resolveFfmpegPath } from './video/engine-detect'
 import {
   UPDATE_CHANNELS,
   UPDATE_DOWNLOAD_DIR_NAME,
@@ -95,9 +102,24 @@ let settingsStore: SettingsStore | null = null
 let updateChecker: UpdateChecker | null = null
 /** 窗口不可见期间产生的更新结果，待重新显示时投递 */
 let pendingUpdate: UpdateCheckResult | null = null
+/** 短视频模块：引擎设置存储、下载器与口播服务（退出时需取消任务） */
+let videoEngineStore: VideoEngineSettingsStore | null = null
+let videoDownloader: VideoDownloader | null = null
+let videoTranscriptService: VideoTranscriptService | null = null
 
 /** Windows 原生窗口控件覆盖层高度，与渲染层顶部栏（56px）对齐 */
 const TITLE_BAR_HEIGHT = 56
+
+/** 视频默认下载目录名（位于系统下载目录下） */
+const VIDEO_DOWNLOAD_DIR_NAME = 'reminder-app-videos'
+
+/** 短视频下载目录：优先使用模块设置，空值回退系统下载目录下的固定子目录 */
+function resolveVideoDownloadDir(): string {
+  const configured = videoEngineStore?.get().downloadDir.trim() ?? ''
+  return configured === ''
+    ? join(app.getPath('downloads'), VIDEO_DOWNLOAD_DIR_NAME)
+    : configured
+}
 
 /**
  * 按当前生效主题刷 Windows 窗口控件覆盖层配色。
@@ -119,6 +141,9 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 900,
     height: 670,
+    // 小窗口下限：低于该尺寸时短视频面板与侧边栏会明显拥挤
+    minWidth: 760,
+    minHeight: 560,
     show: false,
     autoHideMenuBar: true,
     // Windows 使用无边框 + 系统原生窗口控件覆盖层；macOS / Linux 保留原生标题栏
@@ -452,6 +477,43 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
+  // 短视频模块：解析 / 下载 / 口播服务共用同一数据库中的引擎设置
+  const engineStore = new VideoEngineSettingsStore(db)
+  videoEngineStore = engineStore
+  const videoParseService = new VideoParseService()
+  const downloader = new VideoDownloader({
+    resolveFfmpeg: () => resolveFfmpegPath(engineStore.get().engine),
+    onSnapshot: (snapshot) => {
+      // 仅推送下载进度，其余状态由渲染层查询快照
+      if (snapshot.status === 'downloading') {
+        mainWindow?.webContents.send(
+          VIDEO_CHANNELS.onDownloadProgress,
+          snapshot.progress
+        )
+      }
+    }
+  })
+  videoDownloader = downloader
+  const transcriptService = new VideoTranscriptService({
+    store: engineStore,
+    getDownloadDir: () => resolveVideoDownloadDir(),
+    onSnapshot: (snapshot) => {
+      mainWindow?.webContents.send(VIDEO_CHANNELS.onTranscriptState, snapshot)
+    }
+  })
+  videoTranscriptService = transcriptService
+  registerVideoIpc({
+    parseService: videoParseService,
+    downloader,
+    transcriptService,
+    engineStore,
+    getDownloadDir: () => resolveVideoDownloadDir(),
+    getWindow: () => mainWindow,
+    resourcesDir: is.dev
+      ? join(app.getAppPath(), 'resources')
+      : process.resourcesPath
+  })
+
   // 主题切换时同步 Windows 窗口控件覆盖层配色
   nativeTheme.on('updated', () => {
     if (mainWindow) {
@@ -510,6 +572,8 @@ app.on('before-quit', () => {
   usMarketSchedulerRef?.stop()
   updateChecker?.stop()
   updateChecker = null
+  videoDownloader?.cancel()
+  videoTranscriptService?.cancel()
   if (trayTooltipTimer !== null) {
     clearInterval(trayTooltipTimer)
     trayTooltipTimer = null

@@ -1,0 +1,35 @@
+{
+  "code": 0,
+  "message": "0",
+  "data": {
+    "bvid": "BV1xx411c7mD",
+    "aid": 123456,
+    "title": "测试视频标题",
+    "pic": "http://i0.hdslb.com/bfs/archive/cover.jpg",
+    "desc": "这是视频简介",
+    "duration": 245,
+    "pubdate": 1700000000,
+    "owner": {
+      "name": "测试UP主",
+      "mid": 10086
+    },
+    "stat": {
+      "like": 1234,
+      "reply": 56,
+      "favorite": 789,
+      "coin": 12
+    },
+    "pages": [
+      {
+        "cid": 111,
+        "page": 1,
+        "part": "第一期"
+      },
+      {
+        "cid": 222,
+        "page": 2,
+        "part": "第二期"
+      }
+    ]
+  }
+}

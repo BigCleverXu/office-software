@@ -61,10 +61,22 @@ function trimTrailingSep(root: string): string {
 /**
  * 目录内路径的 LIKE 模式：目录去结尾分隔符后补一个分隔符，
  * 通配符（含 Windows 的 `\`）已转义，再拼 `%` 匹配全部子路径。
+ * 同时返回 `/` 与 `\` 两种模式，兼容不同来源写入的路径。
  */
-function likePathPattern(root: string): string {
+function likePathPatterns(root: string): string[] {
   const base = trimTrailingSep(root.trim())
-  return `${escapeLike(`${base}${sep}`)}%`
+  const patterns: string[] = []
+  for (const delimiter of ['/', '\\']) {
+    let trimmed = base
+    while (trimmed.length > 0 && trimmed.endsWith(delimiter)) {
+      trimmed = trimmed.slice(0, -1)
+    }
+    const pattern = `${escapeLike(`${trimmed}${delimiter}`)}%`
+    if (!patterns.includes(pattern)) {
+      patterns.push(pattern)
+    }
+  }
+  return patterns
 }
 
 /** 判断数据库中的字符串是否为合法文件类型 */
@@ -165,10 +177,15 @@ export class FileIndexStore {
       return next
     }
     this.db
-      .prepare(
-        `DELETE FROM file_index WHERE root = ? OR path LIKE ? ESCAPE '\\'`
-      )
-      .run(target, likePathPattern(target))
+      .prepare('DELETE FROM file_index WHERE root = ?')
+      .run(target)
+    for (const pattern of likePathPatterns(target)) {
+      this.db
+        .prepare(
+          `DELETE FROM file_index WHERE path LIKE ? ESCAPE '\\'`
+        )
+        .run(pattern)
+    }
     return next
   }
 
@@ -178,10 +195,14 @@ export class FileIndexStore {
     if (target === '') {
       return 0
     }
-    const result = this.db
-      .prepare(`DELETE FROM file_index WHERE path LIKE ? ESCAPE '\\'`)
-      .run(likePathPattern(target))
-    return Number(result.changes)
+    let changes = 0
+    for (const pattern of likePathPatterns(target)) {
+      const result = this.db
+        .prepare(`DELETE FROM file_index WHERE path LIKE ? ESCAPE '\\'`)
+        .run(pattern)
+      changes += Number(result.changes)
+    }
+    return changes
   }
 
   /** 已索引文件总数 */

@@ -7,6 +7,7 @@ export type AppModuleId =
   | 'market'
   | 'weather'
   | 'news'
+  | 'video'
   | 'notes'
   | 'files'
   | 'sites'
@@ -19,6 +20,7 @@ export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'market',
   'weather',
   'news',
+  'video',
   'notes',
   'files',
   'sites',
