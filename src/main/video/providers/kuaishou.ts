@@ -1,10 +1,13 @@
-// 快手适配器：分享页 __APOLLO_STATE__ 解析，视频 manifest 与图文 atlas
+// 快手适配器：分享页 __APOLLO_STATE__ / 移动页 INIT_STATE 解析
 // 仅主进程使用；只处理公开分享页内嵌状态
 import type {
   VideoImage,
   VideoResource,
   VideoVariant
 } from '../../../shared/video'
+import { isAllowedMediaUrl } from '../../../shared/video'
+import { decodeKuaishouInitState, findKuaishouPhoto } from '../kuaishou-state'
+import type { VideoHttpClient, VideoHttpResponse } from '../http-client'
 import {
   absoluteUrl,
   asArray,
@@ -12,7 +15,8 @@ import {
   numberOrUndefined,
   parseJsonValue,
   pickFirstString,
-  readEmbeddedJson
+  readEmbeddedJson,
+  readEmbeddedJsonText
 } from './embedded'
 import {
   assertOkResponse,
@@ -23,6 +27,19 @@ import {
 
 /** 快手站点根地址 */
 const SITE_ORIGIN = 'https://www.kuaishou.com'
+
+/** 移动端 UA：iOS Safari 会拿到带 INIT_STATE 的移动版作品页 */
+const MOBILE_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+
+/** 允许跟随跳转的页面域名：桌面站与移动站 */
+const PAGE_HOSTS: readonly string[] = ['kuaishou.com', 'gifshow.com']
+
+/** 页面跳转最多跟随次数 */
+const MAX_PAGE_REDIRECTS = 3
+
+/** 需要跟随的跳转状态码 */
+const REDIRECT_STATUSES: readonly number[] = [301, 302, 303, 307, 308]
 
 /** 页面明确提示资源不存在的文案 */
 const NOT_FOUND_TEXTS: readonly string[] = [
@@ -163,6 +180,86 @@ function hasNotFoundText(html: string): boolean {
   return NOT_FOUND_TEXTS.some((text) => html.includes(text))
 }
 
+/** 目标地址是否属于快手页面域名 */
+function isPageUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:') {
+      return false
+    }
+    const host = url.hostname.toLowerCase()
+    return PAGE_HOSTS.some(
+      (suffix) => host === suffix || host.endsWith(`.${suffix}`)
+    )
+  } catch {
+    return false
+  }
+}
+
+/** 以移动端 UA 请求页面；移动站才会下发 INIT_STATE */
+function requestPage(
+  client: VideoHttpClient,
+  url: string
+): Promise<VideoHttpResponse> {
+  return client.request({
+    url,
+    platform: 'kuaishou',
+    referer: `${SITE_ORIGIN}/`,
+    headers: { 'User-Agent': MOBILE_USER_AGENT }
+  })
+}
+
+/** 丢弃未读取的跳转响应体，避免连接悬挂 */
+async function discardBody(response: VideoHttpResponse): Promise<void> {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // 忽略取消失败
+  }
+}
+
+/** 读取页面文本：3xx 时跟随 Location 到最终地址再请求，保留原查询参数 */
+async function loadPage(
+  client: VideoHttpClient,
+  url: string
+): Promise<{ response: VideoHttpResponse; html: string }> {
+  let current = url
+  let response = await requestPage(client, current)
+  let hops = 0
+  while (
+    REDIRECT_STATUSES.includes(response.status) &&
+    hops < MAX_PAGE_REDIRECTS
+  ) {
+    const location = response.headers.get('location')
+    if (location === null || location.trim() === '') {
+      break
+    }
+    const next = absoluteUrl(current, location)
+    if (next === undefined || !isPageUrl(next)) {
+      break
+    }
+    await discardBody(response)
+    current = next
+    hops += 1
+    response = await requestPage(client, current)
+  }
+  return { response, html: (await readTextPayload(response)) ?? '' }
+}
+
+/** 候选中优先白名单 CDN 地址，其次回退第一个有效地址 */
+function preferredMediaUrl(
+  candidates: readonly unknown[]
+): string | undefined {
+  const urls: string[] = []
+  for (const candidate of candidates) {
+    const url = absoluteUrl(SITE_ORIGIN, candidate)
+    if (url !== undefined) {
+      urls.push(url)
+    }
+  }
+  return urls.find((url) => isAllowedMediaUrl('kuaishou', url)) ?? urls[0]
+}
+
 /** 从 manifest 生成清晰度档位 */
 function manifestVariants(manifest: unknown): VideoVariant[] {
   const root = asRecord(manifest)
@@ -184,8 +281,16 @@ function manifestVariants(manifest: unknown): VideoVariant[] {
       if (entry === null) {
         continue
       }
-      const rawUrl = pickFirstString(entry.url, entry.baseUrl, entry.base_url)
-      const url = absoluteUrl(SITE_ORIGIN, rawUrl)
+      const url = preferredMediaUrl([
+        entry.url,
+        entry.baseUrl,
+        entry.base_url,
+        entry.backupUrl,
+        entry.backup_url,
+        ...asArray(entry.backupUrl),
+        ...asArray(entry.backupUrls),
+        ...asArray(entry.backup_urls)
+      ])
       if (url === undefined) {
         continue
       }
@@ -255,6 +360,28 @@ function atlasImages(entity: Record<string, unknown>): VideoImage[] {
   return images
 }
 
+/** 读取封面地址：兼容 coverUrl 字符串与 coverUrls 数组 */
+function coverUrlOf(entity: Record<string, unknown>): string | undefined {
+  const direct = absoluteUrl(SITE_ORIGIN, entity.coverUrl)
+  if (direct !== undefined) {
+    return direct
+  }
+  for (const item of asArray(entity.coverUrls)) {
+    const record = asRecord(item)
+    const raw =
+      typeof item === 'string'
+        ? item
+        : record === null
+          ? ''
+          : pickFirstString(record.url, record.cdnUrl)
+    const url = absoluteUrl(SITE_ORIGIN, raw)
+    if (url !== undefined) {
+      return url
+    }
+  }
+  return undefined
+}
+
 /** 由作品实体构建统一资源 */
 function buildResource(
   entity: Record<string, unknown>,
@@ -264,7 +391,7 @@ function buildResource(
   const caption = pickFirstString(entity.caption, entity.title)
   const title = caption === '' ? `快手作品 ${id}` : caption
   const author = pickFirstString(entity.userName, entity.nickname)
-  const coverUrl = absoluteUrl(SITE_ORIGIN, entity.coverUrl)
+  const coverUrl = coverUrlOf(entity)
   const images = atlasImages(entity)
   const kind = images.length > 0 ? 'note' : 'video'
 
@@ -341,26 +468,35 @@ export const kuaishouProvider: VideoProvider = {
         ? input.resolvedUrl
         : `${SITE_ORIGIN}/short-video/${target.id}`
 
-    const response = await ctx.client.request({
-      url: pageUrl,
-      platform: 'kuaishou'
-    })
+    const { response, html } = await loadPage(ctx.client, pageUrl)
     if (response.status === 404) {
       return { ok: false, reason: 'expired', detail: '分享页不存在' }
     }
     assertOkResponse(response)
-    const html = (await readTextPayload(response)) ?? ''
-    if (html.trim() === '') {
-      return { ok: false, reason: 'api-changed', detail: '分享页内容为空' }
+
+    // 优先桌面分享页的 Apollo 状态；桌面页受限或只返回 {"result":2} 时
+    // 继续读取移动页 INIT_STATE，避免直接判定接口变更
+    let entity: Record<string, unknown> | null = null
+    const apollo = readEmbeddedJson(html, 'window.__APOLLO_STATE__')
+    if (apollo !== null) {
+      entity =
+        findEntityByKey(apollo, target.id) ??
+        findEntityByShape(apollo, target.id)
     }
-    const state = readEmbeddedJson(html, 'window.__APOLLO_STATE__')
-    const entity =
-      findEntityByKey(state, target.id) ?? findEntityByShape(state, target.id)
+    if (entity === null) {
+      const rawState = readEmbeddedJsonText(html, 'window.INIT_STATE')
+      if (rawState !== null) {
+        const state = decodeKuaishouInitState(rawState)
+        if (state !== null) {
+          entity = findKuaishouPhoto(state, target.id)
+        }
+      }
+    }
     if (entity === null) {
       return {
         ok: false,
         reason: hasNotFoundText(html) ? 'expired' : 'api-changed',
-        detail: '未找到作品实体'
+        detail: '快手页面受限，未能获取作品数据'
       }
     }
     return buildResource(entity, target.id, input)

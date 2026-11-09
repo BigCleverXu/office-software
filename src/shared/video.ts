@@ -184,6 +184,8 @@ export type VideoTranscriptSnapshot =
       status: 'completed'
       text: string
       fileName: string
+      /** 识别源文件绝对路径，旧快照可能缺失 */
+      filePath?: string
       /** 实际使用的识别引擎名 */
       engine: string
       elapsedMs: number
@@ -545,7 +547,20 @@ export function isShortLinkUrl(url: string): boolean {
   if (hostname === null) {
     return false
   }
-  return SHORT_LINK_HOSTS.some((host) => matchesHost(hostname, host))
+  if (SHORT_LINK_HOSTS.some((host) => matchesHost(hostname, host))) {
+    return true
+  }
+  // 快手网页版分享短链形如 https://www.kuaishou.com/f/xxxx，
+  // 需要跟随重定向才能得到 /short-video/{id}
+  if (!matchesHost(hostname, 'kuaishou.com')) {
+    return false
+  }
+  try {
+    const pathname = new URL(url.trim()).pathname
+    return /^\/f\/[A-Za-z0-9_-]+/.test(pathname)
+  } catch {
+    return false
+  }
 }
 
 /** 平台中文名，未知平台返回「未知平台」 */

@@ -122,6 +122,16 @@ describe('isShortLinkUrl', () => {
     expect(isShortLinkUrl('https://v.kuaishou.com/abc')).toBe(true)
   })
 
+  it('识别快手网页版 /f/ 分享短链', () => {
+    expect(isShortLinkUrl('https://www.kuaishou.com/f/X1EhIqKKKlGQ1QB')).toBe(
+      true
+    )
+    expect(
+      isShortLinkUrl('https://www.kuaishou.com/short-video/3x3pk285r7w5qpi')
+    ).toBe(false)
+    expect(isShortLinkUrl('https://www.kuaishou.com/f/')).toBe(false)
+  })
+
   it('普通资源页与非法地址不算短链', () => {
     expect(isShortLinkUrl('https://www.douyin.com/video/1')).toBe(false)
     expect(isShortLinkUrl('https://www.bilibili.com/video/BV1')).toBe(false)

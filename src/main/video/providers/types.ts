@@ -12,6 +12,7 @@ import {
   type VideoHttpResponse
 } from '../http-client'
 import type { PlatformSigner } from '../signing'
+import type { XiaohongshuBrowserBridge } from '../xiaohongshu-browser'
 
 /** 适配器运行上下文：注入客户端、可选签名器、时钟与浏览器降级桥接 */
 export interface ProviderContext {
@@ -20,6 +21,8 @@ export interface ProviderContext {
   now?: () => number
   /** 抖音 HTTP 链路失效时使用的浏览器降级；未注入则不启用 */
   browser?: DouyinBrowserBridge
+  /** 小红书 HTTP 链路失效时使用的浏览器降级；未注入则不启用 */
+  xiaohongshuBrowser?: XiaohongshuBrowserBridge
 }
 
 /** 适配器解析结果：成功返回资源，失败返回分类原因 */

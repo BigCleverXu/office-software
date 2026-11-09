@@ -18,6 +18,10 @@ import {
 import { VideoHttpClient, VideoHttpError } from './http-client'
 import { resolveShareLink } from './link'
 import { SIGNER_REGISTRY, type PlatformSigner } from './signing'
+import {
+  createXiaohongshuBrowserResolver,
+  type XiaohongshuBrowserBridge
+} from './xiaohongshu-browser'
 import { bilibiliProvider } from './providers/bilibili'
 import { douyinProvider } from './providers/douyin'
 import { kuaishouProvider } from './providers/kuaishou'
@@ -57,6 +61,11 @@ export interface VideoParseServiceOptions {
    * 显式传 null 可关闭降级，测试可注入假实现。
    */
   browser?: DouyinBrowserBridge | null
+  /**
+   * 小红书浏览器降级桥接：缺省时使用真实 Electron 窗口；
+   * 显式传 null 可关闭降级，测试可注入假实现。
+   */
+  xiaohongshuBrowser?: XiaohongshuBrowserBridge | null
 }
 
 /** 截断异常信息 */
@@ -103,6 +112,7 @@ export class VideoParseService {
   private readonly cacheTtlMs: number
   private readonly timeoutMs: number
   private readonly browser: DouyinBrowserBridge | undefined
+  private readonly xiaohongshuBrowser: XiaohongshuBrowserBridge | undefined
   private readonly cache = new Map<string, CachedResource>()
 
   constructor(options: VideoParseServiceOptions = {}) {
@@ -118,6 +128,10 @@ export class VideoParseService {
       options.browser === undefined
         ? createDouyinBrowserResolver()
         : (options.browser ?? undefined)
+    this.xiaohongshuBrowser =
+      options.xiaohongshuBrowser === undefined
+        ? createXiaohongshuBrowserResolver()
+        : (options.xiaohongshuBrowser ?? undefined)
   }
 
   /** 解析分享文本；任何失败都以分类结果返回 */
@@ -182,7 +196,8 @@ export class VideoParseService {
       client: this.client,
       signer: this.signers[link.platform],
       now: this.now,
-      browser: this.browser
+      browser: this.browser,
+      xiaohongshuBrowser: this.xiaohongshuBrowser
     }
     const result = await provider.parse(
       { sourceUrl: link.sourceUrl, resolvedUrl: link.resolvedUrl },

@@ -79,7 +79,7 @@ export const MODULES: ModuleMeta[] = [
   {
     id: 'video',
     label: '短视频',
-    description: '解析抖音、快手、小红书与 B 站链接，下载视频或图文并提取口播',
+    description: '解析下载视频与图文，本地提取口播文本',
     icon: Clapperboard,
     component: VideoPanel
   },

@@ -67,8 +67,8 @@ const {
   cancelDownload,
   openDownloaded,
   showInFolder,
-  transcriptStart,
-  transcriptBusy,
+  setTranscriptTarget,
+  setSubModule,
   actionError
 } = useVideo()
 
@@ -222,6 +222,18 @@ const handleVariantUpdate = (value: unknown): void => {
   if (typeof value === 'string') {
     selectVariant(value)
   }
+}
+
+/** 把已下载文件带入口播子模块并切换到口播页 */
+const handleExtractTranscript = (): void => {
+  const current = completedState.value
+  if (current === null) return
+  setTranscriptTarget({
+    filePath: current.filePath,
+    fileName: current.fileName,
+    source: 'download'
+  })
+  setSubModule('transcript')
 }
 
 watch(
@@ -465,14 +477,9 @@ watch(
               <FolderSearch data-icon="inline-start" />
               所在文件夹
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              :disabled="transcriptBusy"
-              @click="transcriptStart"
-            >
+            <Button variant="ghost" size="sm" @click="handleExtractTranscript">
               <Captions data-icon="inline-start" />
-              重新提取口播
+              去提取口播
             </Button>
           </div>
         </div>

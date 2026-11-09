@@ -20,6 +20,7 @@ import type {
   ProviderParseResult
 } from '../../src/main/video/providers/types'
 import type { PlatformSigner } from '../../src/main/video/signing'
+import type { XiaohongshuBrowserBridge } from '../../src/main/video/xiaohongshu-browser'
 import type { VideoParseResult, VideoResource } from '../../src/shared/video'
 
 /** 读取测试夹具文本 */
@@ -123,9 +124,10 @@ function inputOf(url: string): { sourceUrl: string; resolvedUrl: string } {
 /** 构造适配器上下文 */
 function contextOf(
   client: VideoHttpClient,
-  signer?: PlatformSigner
+  signer?: PlatformSigner,
+  xiaohongshuBrowser?: XiaohongshuBrowserBridge
 ): ProviderContext {
-  return { client, signer }
+  return { client, signer, xiaohongshuBrowser }
 }
 
 describe('内嵌 JSON 与 HTML 清洗', () => {
@@ -485,6 +487,48 @@ describe('快手适配器', () => {
     }
   }
 
+  /** 对可打印 ASCII 做 +1 位移，模拟移动页 INIT_STATE 编码 */
+  function shiftText(text: string): string {
+    let result = ''
+    for (const char of text) {
+      const code = char.charCodeAt(0)
+      if (code >= 1 && code <= 126) {
+        result += String.fromCharCode(code === 126 ? 1 : code + 1)
+      } else {
+        result += char
+      }
+    }
+    return result
+  }
+
+  /** 递归编码对象键名与字符串 */
+  function encodeValue(value: unknown): unknown {
+    if (typeof value === 'string') {
+      return shiftText(value)
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => encodeValue(item))
+    }
+    if (value !== null && typeof value === 'object') {
+      const result: Record<string, unknown> = {}
+      for (const [key, item] of Object.entries(value)) {
+        result[shiftText(key)] = encodeValue(item)
+      }
+      return result
+    }
+    return value
+  }
+
+  /** 由状态对象构造内联移动页 */
+  function mobilePage(state: unknown): string {
+    const encoded = JSON.stringify(encodeValue(state))
+    return (
+      '<!doctype html><html><body>' +
+      `<script>window.INIT_STATE = ${encoded};</script>` +
+      '<div>移动端作品页</div></body></html>'
+    )
+  }
+
   it('解析视频 manifest 清晰度档位', async () => {
     const client = createClient(
       makeFetch([
@@ -528,6 +572,85 @@ describe('快手适配器', () => {
     expect(resource.variants).toEqual([])
     expect(resource.images).toHaveLength(2)
     expect(resource.images[1]?.url).toBe('https://p1.kwaicdn.com/b.jpg')
+  })
+
+  it('移动端页面解码 INIT_STATE 并优选白名单 CDN', async () => {
+    const id = '3x3pk285r7w5qpi'
+    const manifest = JSON.stringify({
+      adaptationSet: [
+        {
+          representation: [
+            {
+              url: 'https://k0u73ydfy.djvod.ndcimgs.com/a.mp4',
+              backupUrl: ['https://v23-3.kwaicdn.com/a.mp4'],
+              width: 1920,
+              height: 1080,
+              avgBitrate: 2000000,
+              qualityLabel: '1080p'
+            }
+          ]
+        }
+      ]
+    })
+    const html = mobilePage({
+      result: 1,
+      photo: {
+        photoId: id,
+        caption: '移动端标题',
+        userName: '移动端作者',
+        duration: 16000,
+        coverUrls: ['https://p1.kwaicdn.com/mobile-cover.jpg'],
+        manifest
+      }
+    })
+    const calls: string[] = []
+    const client = createClient(
+      makeFetch(
+        [
+          {
+            match: (url) => url.pathname.includes(id),
+            body: html,
+            headers: { 'content-type': 'text/html' }
+          }
+        ],
+        calls
+      )
+    )
+    const url = `https://www.kuaishou.com/short-video/${id}?shareToken=${id}&shareMethod=picture`
+    const resource = resourceOf(
+      await kuaishouProvider.parse(inputOf(url), contextOf(client))
+    )
+
+    expect(resource.title).toBe('移动端标题')
+    expect(resource.author).toBe('移动端作者')
+    expect(resource.durationSec).toBe(16)
+    expect(resource.variants).toHaveLength(1)
+    expect(resource.variants[0]?.url).toBe('https://v23-3.kwaicdn.com/a.mp4')
+    expect(resource.cover?.url).toBe('https://p1.kwaicdn.com/mobile-cover.jpg')
+    expect(calls[0]).toContain('shareToken=')
+  })
+
+  it('缺少编码状态归为 api-changed', async () => {
+    const id = '3x3pk285r7w5qpi'
+    const client = createClient(
+      makeFetch([
+        {
+          match: (url) => url.pathname.includes(id),
+          body: '<!doctype html><html><body><div>快手页面占位</div></body></html>',
+          headers: { 'content-type': 'text/html' }
+        }
+      ])
+    )
+    const result = await kuaishouProvider.parse(
+      inputOf(`https://www.kuaishou.com/short-video/${id}`),
+      contextOf(client)
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('api-changed')
+      expect(result.detail).toContain('快手页面受限')
+    }
   })
 })
 
@@ -598,6 +721,115 @@ describe('小红书适配器', () => {
     expect(resource.cover?.url).toBe(
       'https://sns-img-qc.xhscdn.com/video-cover.jpg'
     )
+  })
+
+  /** 登录页：有内嵌状态但没有 noteDetailMap */
+  function loginPageHtml(): string {
+    return (
+      '<!doctype html><html><head><script>' +
+      'window.__INITIAL_STATE__ = {"note":{"noteDetailMap":{}}};' +
+      '</script></head><body><div>登录后查看</div></body></html>'
+    )
+  }
+
+  /** 浏览器降级返回的状态 */
+  function browserState(id: string): Record<string, unknown> {
+    return {
+      note: {
+        noteDetailMap: {
+          [id]: {
+            note: {
+              noteId: id,
+              type: 'normal',
+              title: '浏览器降级笔记',
+              user: { nickname: '浏览器作者' },
+              imageList: [
+                {
+                  urlDefault: 'https://sns-img-qc.xhscdn.com/b1.jpg',
+                  width: 1080,
+                  height: 1440
+                },
+                {
+                  urlDefault: 'https://sns-img-qc.xhscdn.com/b2.jpg',
+                  width: 1080,
+                  height: 1440
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  it('HTTP 返回登录页时使用浏览器降级解析', async () => {
+    const id = 'aaaabbbbccccddddeeeeffff'
+    const calls: string[] = []
+    const browser: XiaohongshuBrowserBridge = {
+      async loadNoteState(input) {
+        calls.push(input.url)
+        return browserState(id)
+      }
+    }
+    const client = createClient(
+      makeFetch([
+        {
+          match: (url) =>
+            url.hostname === 'www.xiaohongshu.com' &&
+            url.pathname === `/explore/${id}`,
+          body: loginPageHtml(),
+          headers: { 'content-type': 'text/html' }
+        }
+      ])
+    )
+    const url =
+      `https://www.xiaohongshu.com/explore/${id}` +
+      '?xsec_token=TOKEN123&xsec_source=pc_share'
+    const resource = resourceOf(
+      await xiaohongshuProvider.parse(
+        inputOf(url),
+        contextOf(client, undefined, browser)
+      )
+    )
+
+    expect(resource.title).toBe('浏览器降级笔记')
+    expect(resource.author).toBe('浏览器作者')
+    expect(resource.kind).toBe('note')
+    expect(resource.images.map((image) => image.url)).toEqual([
+      'https://sns-img-qc.xhscdn.com/b1.jpg',
+      'https://sns-img-qc.xhscdn.com/b2.jpg'
+    ])
+    expect(calls).toEqual([url])
+  })
+
+  it('浏览器降级也失败时归为 api-changed', async () => {
+    const id = 'aaaabbbbccccddddeeeeffff'
+    const browser: XiaohongshuBrowserBridge = {
+      async loadNoteState() {
+        return null
+      }
+    }
+    const client = createClient(
+      makeFetch([
+        {
+          match: (url) =>
+            url.hostname === 'www.xiaohongshu.com' &&
+            url.pathname === `/explore/${id}`,
+          body: loginPageHtml(),
+          headers: { 'content-type': 'text/html' }
+        }
+      ])
+    )
+    const result = await xiaohongshuProvider.parse(
+      inputOf(`https://www.xiaohongshu.com/explore/${id}`),
+      contextOf(client, undefined, browser)
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('api-changed')
+      expect(result.detail).toContain('小红书页面受限')
+    }
   })
 })
 

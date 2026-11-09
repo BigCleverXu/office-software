@@ -15,10 +15,19 @@ import {
   readEmbeddedJsonText,
   toIsoTime
 } from './embedded'
-import { assertOkResponse, readTextPayload, type VideoProvider } from './types'
+import {
+  readTextPayload,
+  type ProviderContext,
+  type VideoProvider
+} from './types'
+import { VideoHttpError } from '../http-client'
 
 /** 小红书站点根地址 */
 const SITE_ORIGIN = 'https://www.xiaohongshu.com'
+
+/** 移动端 UA：匿名访问笔记页时服务端会返回带 __INITIAL_STATE__ 的移动版页面 */
+const MOBILE_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 
 /** 页面明确提示笔记不可见的文案 */
 const NOT_FOUND_TEXTS: readonly string[] = [
@@ -248,6 +257,42 @@ function findNote(
   return { note: found, notFound }
 }
 
+/** 从状态解析笔记：先按约定结构查找，状态本身是笔记时直接使用 */
+function resolveNote(
+  state: unknown,
+  id: string
+): { note: Record<string, unknown> | null; notFound: boolean } {
+  const lookup = findNote(state, id)
+  if (lookup.note !== null) {
+    return lookup
+  }
+  const direct = asRecord(state)
+  if (direct !== null && looksLikeNote(direct)) {
+    return { note: direct, notFound: lookup.notFound }
+  }
+  return lookup
+}
+
+/** 通过浏览器渲染读取笔记状态；失败或未注入桥接时返回空结果 */
+async function loadNoteByBrowser(
+  pageUrl: string,
+  target: XiaohongshuTarget,
+  browser: ProviderContext['xiaohongshuBrowser']
+): Promise<{ note: Record<string, unknown> | null; notFound: boolean }> {
+  if (browser === undefined) {
+    return { note: null, notFound: false }
+  }
+  try {
+    const state = await browser.loadNoteState({ url: pageUrl })
+    if (state === null) {
+      return { note: null, notFound: false }
+    }
+    return resolveNote(state, target.id)
+  } catch {
+    return { note: null, notFound: false }
+  }
+}
+
 /** 读取图文图片列表 */
 function buildImages(note: Record<string, unknown>): VideoImage[] {
   const images: VideoImage[] = []
@@ -409,6 +454,38 @@ function buildShareUrl(target: XiaohongshuTarget): string {
   return url.toString()
 }
 
+/**
+ * 浏览器降级优先使用原始分享地址：`/discovery/item/...` 自带的分享签名
+ * 可以让页面匿名渲染，改写成合成 `/explore/...` 反而更容易被登录墙拦截。
+ */
+function browserUrlOf(
+  input: { sourceUrl: string; resolvedUrl: string },
+  fallback: URL
+): string {
+  for (const raw of [input.resolvedUrl, input.sourceUrl]) {
+    try {
+      const url = new URL(raw)
+      if (url.protocol !== 'https:') {
+        continue
+      }
+      const host = url.hostname.toLowerCase()
+      if (host !== 'xiaohongshu.com' && !host.endsWith('.xiaohongshu.com')) {
+        continue
+      }
+      if (!/\/explore\/|\/discovery\/item\//.test(url.pathname)) {
+        continue
+      }
+      if ((url.searchParams.get('xsec_token') ?? '').trim() === '') {
+        continue
+      }
+      return url.toString()
+    } catch {
+      // 忽略非法地址，继续尝试下一个
+    }
+  }
+  return fallback.toString()
+}
+
 /** 小红书适配器 */
 export const xiaohongshuProvider: VideoProvider = {
   platform: 'xiaohongshu',
@@ -429,48 +506,70 @@ export const xiaohongshuProvider: VideoProvider = {
       pageUrl.searchParams.set('xsec_source', target.xsecSource)
     }
 
-    const response = await ctx.client.request({
-      url: pageUrl.toString(),
-      platform: 'xiaohongshu',
-      referer: `${SITE_ORIGIN}/`
-    })
-    if (response.status === 404) {
-      return { ok: false, reason: 'expired', detail: '笔记页不存在' }
-    }
-    assertOkResponse(response)
-    const html = (await readTextPayload(response)) ?? ''
-    if (html.trim() === '') {
-      return { ok: false, reason: 'api-changed', detail: '笔记页内容为空' }
+    // 匿名 HTTP 请求可能被 302 到登录页或触发风控，此时不直接失败，
+    // 记录空 HTML 后继续尝试浏览器降级（真实浏览器可拿到 SSR 状态）
+    let html = ''
+    try {
+      const response = await ctx.client.request({
+        // 原始分享地址（discovery/item 或 explore 带 xsec_token）配合移动端 UA
+        // 才能匿名拿到带 __INITIAL_STATE__ 的页面；桌面 UA 常被 302 到登录页
+        url: browserUrlOf(input, pageUrl),
+        platform: 'xiaohongshu',
+        referer: `${SITE_ORIGIN}/`,
+        headers: { 'User-Agent': MOBILE_USER_AGENT }
+      })
+      if (response.status === 404) {
+        return { ok: false, reason: 'expired', detail: '笔记页不存在' }
+      }
+      if (response.ok) {
+        html = (await readTextPayload(response)) ?? ''
+      }
+    } catch (error) {
+      if (error instanceof VideoHttpError && error.status === 404) {
+        return { ok: false, reason: 'expired', detail: '笔记页不存在' }
+      }
+      // 其余 HTTP / 网络错误交给浏览器降级判定
     }
 
+    // HTTP 链路：匿名请求可能被重定向到登录页，读不到笔记时继续尝试浏览器降级
+    let note: Record<string, unknown> | null = null
+    let notFound = hasNotFoundText(html)
     const rawText = readEmbeddedJsonText(html, 'window.__INITIAL_STATE__')
-    if (rawText === null) {
-      return {
-        ok: false,
-        reason: hasNotFoundText(html) ? 'expired' : 'api-changed',
-        detail: '未找到内嵌状态'
+    if (rawText !== null) {
+      let state: unknown = null
+      try {
+        state = JSON.parse(replaceBareUndefined(rawText))
+      } catch {
+        state = null
+      }
+      if (state !== null) {
+        const lookup = resolveNote(state, target.id)
+        note = lookup.note
+        notFound = notFound || lookup.notFound
       }
     }
-    let state: unknown
-    try {
-      state = JSON.parse(replaceBareUndefined(rawText))
-    } catch {
+
+    // 浏览器降级：真实浏览器可渲染页面并带回 SSR 状态
+    if (note === null && ctx.xiaohongshuBrowser !== undefined) {
+      const fallback = await loadNoteByBrowser(
+        browserUrlOf(input, pageUrl),
+        target,
+        ctx.xiaohongshuBrowser
+      )
+      note = fallback.note
+      notFound = notFound || fallback.notFound
+    }
+
+    if (note === null) {
+      if (notFound) {
+        return { ok: false, reason: 'expired', detail: '未找到笔记数据' }
+      }
       return {
         ok: false,
         reason: 'api-changed',
-        detail: '内嵌状态不是合法 JSON'
+        detail: '小红书页面受限，未能获取笔记数据'
       }
     }
-
-    const lookup = findNote(state, target.id)
-    if (lookup.note === null) {
-      return {
-        ok: false,
-        reason:
-          lookup.notFound || hasNotFoundText(html) ? 'expired' : 'api-changed',
-        detail: '未找到笔记数据'
-      }
-    }
-    return { ok: true, resource: buildResource(lookup.note, target, input) }
+    return { ok: true, resource: buildResource(note, target, input) }
   }
 }

@@ -441,6 +441,7 @@ export class VideoTranscriptService {
         status: 'completed',
         text: cleanTranscriptText(text),
         fileName: basename(filePath),
+        filePath,
         engine: basename(probe.binary),
         elapsedMs: Math.max(0, this.now() - startedAt)
       })

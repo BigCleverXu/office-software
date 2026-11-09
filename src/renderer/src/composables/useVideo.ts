@@ -16,6 +16,19 @@ import type {
   VideoVariant
 } from '@shared/video'
 
+/** 短视频子模块标识 */
+export type VideoSubModuleId = 'parse' | 'transcript'
+
+/** 口播目标文件来源：本地选择 / 解析下载带入 */
+export type TranscriptSource = 'local' | 'download'
+
+/** 口播目标文件 */
+export interface TranscriptTarget {
+  filePath: string
+  fileName: string
+  source: TranscriptSource
+}
+
 /** 诊断详情最大长度，避免底层错误刷屏 */
 const MAX_DETAIL_LENGTH = 160
 
@@ -25,8 +38,8 @@ const COPY_RESET_MS = 3000
 /** 未粘贴链接时的提示 */
 const EMPTY_INPUT_MESSAGE = '请先粘贴分享链接'
 
-/** 未完成下载时发起口播提取的提示 */
-const DOWNLOAD_REQUIRED_MESSAGE = '请先完成视频下载'
+/** 未选择口播目标文件时的提示 */
+const TARGET_REQUIRED_MESSAGE = '请先选择视频文件'
 
 /** 口播任务开始的乐观阶段文案 */
 const EXTRACTING_MESSAGE = '正在抽取音轨…'
@@ -41,6 +54,11 @@ function detailFromError(error: unknown): string {
         : ''
   const trimmed = raw.replace(/\s+/g, ' ').trim()
   return trimmed === '' ? '' : trimmed.slice(0, MAX_DETAIL_LENGTH)
+}
+
+/** 从路径取文件名，兼容 Windows 与 POSIX 分隔符 */
+function fileNameFromPath(filePath: string): string {
+  return filePath.split(/[\\/]/).pop() || filePath
 }
 
 /** 默认模块设置的深拷贝，避免调用方误改共享常量 */
@@ -78,11 +96,12 @@ const transcriptText = ref('')
 const engineSettings = ref<VideoModuleSettings>(defaultSettings())
 const engineProbe = ref<VideoEngineProbe | null>(null)
 const engineProbing = ref(false)
-const engineDialogOpen = ref(false)
 const copied = ref(false)
 const exporting = ref(false)
 const exportNotice = ref<string | null>(null)
 const actionError = ref<string | null>(null)
+const transcriptTarget = ref<TranscriptTarget | null>(null)
+const subModule = ref<VideoSubModuleId>('parse')
 
 /** 解析请求序号，丢弃过期响应 */
 let parseToken = 0
@@ -243,10 +262,17 @@ const parse = async (text?: string): Promise<void> => {
   }
 }
 
-/** 清空输入与错误提示，保留已有结果 */
+/** 清空输入与错误提示，并取消进行中的任务、复位结果展示 */
 const clearInput = (): void => {
   input.value = ''
   parseError.value = null
+  if (downloadSnapshot.value.status === 'downloading') {
+    void window.api.video.cancelDownload().catch(() => undefined)
+  }
+  if (transcriptSnapshot.value.status === 'running') {
+    void window.api.video.cancelTranscript().catch(() => undefined)
+  }
+  resetResourceState()
 }
 
 /** 切换清晰度：清空当前资源的下载 / 口播展示，避免档位错配 */
@@ -338,6 +364,11 @@ const download = async (reset = false): Promise<void> => {
     if (token !== downloadToken || resource.value?.id !== current.id) return
     downloadSnapshot.value = snapshot
     if (snapshot.status === 'completed') {
+      setTranscriptTarget({
+        filePath: snapshot.filePath,
+        fileName: snapshot.fileName,
+        source: 'download'
+      })
       await syncTranscriptAfterDownload(snapshot)
     }
   } catch (error) {
@@ -405,23 +436,97 @@ const showInFolder = async (): Promise<void> => {
   }
 }
 
-/** 开始口播提取：必须先完成下载 */
-const transcriptStart = async (): Promise<void> => {
-  const current = downloadSnapshot.value
-  if (current.status !== 'completed') {
+/** 设置口播目标文件，供口播子模块带入 */
+function setTranscriptTarget(target: TranscriptTarget | null): void {
+  transcriptTarget.value =
+    target === null || target.filePath.trim() === '' ? null : target
+}
+
+/** 切换子模块（解析下载 / 口播提取） */
+function setSubModule(id: VideoSubModuleId): void {
+  subModule.value = id
+}
+
+/**
+ * 弹出文件选择框选择口播目标文件；
+ * 取消或失败时保留原目标不变。
+ */
+const pickTranscriptFile = async (): Promise<void> => {
+  let result: Awaited<ReturnType<typeof window.api.video.pickFile>>
+  try {
+    result = await window.api.video.pickFile('media')
+  } catch {
+    return
+  }
+  if (result.canceled) return
+  const filePath = result.path?.trim() ?? ''
+  if (filePath === '') return
+  setTranscriptTarget({
+    filePath,
+    fileName: fileNameFromPath(filePath),
+    source: 'local'
+  })
+}
+
+/**
+ * 恢复主进程口播快照：
+ * 完成且带 filePath 时带入目标并应用文本，运行中采纳状态，其余不改动。
+ */
+const restoreTranscriptState = async (): Promise<void> => {
+  let state: VideoTranscriptSnapshot | null = null
+  try {
+    state = await window.api.video.getTranscriptState()
+  } catch {
+    state = null
+  }
+  if (state === null) return
+
+  if (state.status === 'completed') {
+    const filePath = state.filePath?.trim() ?? ''
+    if (filePath !== '') {
+      const current = transcriptTarget.value
+      if (current === null || current.filePath !== filePath) {
+        setTranscriptTarget({
+          filePath,
+          fileName: state.fileName,
+          source: 'download'
+        })
+      }
+      activeTranscriptFileName = state.fileName
+      applyTranscriptSnapshot(state)
+    }
+    return
+  }
+
+  if (state.status === 'running') {
+    activeTranscriptFileName = transcriptTarget.value?.fileName ?? null
+    transcriptSnapshot.value = state
+  }
+}
+
+/** 开始口播提取：优先使用参数路径，其次当前目标文件 */
+const transcriptStart = async (path?: string): Promise<void> => {
+  if (transcriptSnapshot.value.status === 'running') return
+
+  const target = transcriptTarget.value
+  const filePath = path ?? target?.filePath ?? ''
+  if (filePath.trim() === '') {
     activeTranscriptFileName = null
     transcriptSnapshot.value = {
       status: 'failed',
       reason: 'unknown',
-      message: DOWNLOAD_REQUIRED_MESSAGE
+      message: TARGET_REQUIRED_MESSAGE
     }
     return
   }
-  if (transcriptSnapshot.value.status === 'running') return
 
+  const fileName =
+    target !== null && target.filePath === filePath
+      ? target.fileName
+      : fileNameFromPath(filePath)
   transcriptToken += 1
   const token = transcriptToken
-  activeTranscriptFileName = current.fileName
+  activeTranscriptFileName = fileName
   exportNotice.value = null
   transcriptDirty = false
   transcriptText.value = ''
@@ -432,9 +537,7 @@ const transcriptStart = async (): Promise<void> => {
   }
 
   try {
-    const snapshot = await window.api.video.startTranscript({
-      filePath: current.filePath
-    })
+    const snapshot = await window.api.video.startTranscript({ filePath })
     if (token !== transcriptToken) return
     applyTranscriptSnapshot(snapshot)
   } catch (error) {
@@ -634,8 +737,6 @@ interface UseVideo {
   engineProbe: Ref<VideoEngineProbe | null>
   /** 引擎探测进行中 */
   engineProbing: Ref<boolean>
-  /** 引擎配置弹窗开关 */
-  engineDialogOpen: Ref<boolean>
   /** 复制成功反馈 */
   copied: Ref<boolean>
   /** 导出进行中 */
@@ -644,6 +745,10 @@ interface UseVideo {
   exportNotice: Ref<string | null>
   /** 打开文件等操作错误 */
   actionError: Ref<string | null>
+  /** 口播目标文件，null 表示尚未选择 */
+  transcriptTarget: Ref<TranscriptTarget | null>
+  /** 当前短视频子模块 */
+  subModule: Ref<VideoSubModuleId>
   parse: (text?: string) => Promise<void>
   clearInput: () => void
   selectVariant: (variantId: string) => void
@@ -652,11 +757,15 @@ interface UseVideo {
   resetDownload: () => Promise<void>
   openDownloaded: () => Promise<void>
   showInFolder: () => Promise<void>
-  transcriptStart: () => Promise<void>
+  transcriptStart: (path?: string) => Promise<void>
   transcriptCancel: () => Promise<void>
   updateTranscriptText: (value: string) => void
   exportTranscript: () => Promise<void>
   copyTranscript: () => Promise<void>
+  setTranscriptTarget: (target: TranscriptTarget | null) => void
+  pickTranscriptFile: () => Promise<void>
+  restoreTranscriptState: () => Promise<void>
+  setSubModule: (id: VideoSubModuleId) => void
   loadEngine: () => Promise<void>
   probeEngine: () => Promise<void>
   updateEngineSettings: (
@@ -685,11 +794,12 @@ export function useVideo(): UseVideo {
     engineSettings,
     engineProbe,
     engineProbing,
-    engineDialogOpen,
     copied,
     exporting,
     exportNotice,
     actionError,
+    transcriptTarget,
+    subModule,
     parse,
     clearInput,
     selectVariant,
@@ -703,6 +813,10 @@ export function useVideo(): UseVideo {
     updateTranscriptText,
     exportTranscript,
     copyTranscript,
+    setTranscriptTarget,
+    pickTranscriptFile,
+    restoreTranscriptState,
+    setSubModule,
     loadEngine,
     probeEngine,
     updateEngineSettings,
