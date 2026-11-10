@@ -4,9 +4,12 @@ import {
   MARKET_CHANNELS,
   isMarketRegion,
   normalizeCode,
+  normalizePosition,
   normalizeUsSymbol,
   type AddWatchResult,
-  type MarketState
+  type MarketPosition,
+  type MarketState,
+  type WatchItem
 } from '../../shared/market'
 import type { AppModuleId } from '../../shared/navigation'
 import type { MarketStore } from '../market-store'
@@ -47,7 +50,8 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
     MARKET_CHANNELS.addWatch,
     async (
       _event: Electron.IpcMainInvokeEvent,
-      code: string
+      code: string,
+      position?: MarketPosition
     ): Promise<AddWatchResult> => {
       // 6 位纯数字按 A 股处理，其余按美股 ticker 处理
       const isCnCode = /^\d{6}$/.test(code.trim())
@@ -78,7 +82,8 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
         code: pureCode,
         symbol,
         market,
-        name: quote.name
+        name: quote.name,
+        position: normalizePosition(position)
       })
       // 不 await，避免阻塞添加弹窗关闭
       if (isCnCode) {
@@ -88,6 +93,22 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
       }
       broadcast()
       return { ok: true, item }
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.updatePosition,
+    (
+      _event: Electron.IpcMainInvokeEvent,
+      symbol: string,
+      position: MarketPosition
+    ): WatchItem | null => {
+      const item = store.updatePosition(symbol, position)
+      if (!item) {
+        return null
+      }
+      broadcast()
+      return item
     }
   )
 

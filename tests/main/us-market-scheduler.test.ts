@@ -54,7 +54,9 @@ const WATCH: WatchItem[] = [
     market: 'us',
     name: '苹果',
     addedAt: 1,
-    sortOrder: 0
+    sortOrder: 0,
+    shares: 0,
+    cost: 0
   },
   {
     code: 'TSLA',
@@ -62,7 +64,9 @@ const WATCH: WatchItem[] = [
     market: 'us',
     name: '特斯拉',
     addedAt: 2,
-    sortOrder: 1
+    sortOrder: 1,
+    shares: 0,
+    cost: 0
   }
 ]
 

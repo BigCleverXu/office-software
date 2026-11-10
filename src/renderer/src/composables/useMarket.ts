@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import type {
   AddWatchResult,
+  MarketPosition,
   MarketRegion,
   MarketSettings,
   MarketSnapshot,
@@ -19,7 +20,11 @@ interface UseMarket {
   settings: Ref<MarketSettings>
   region: ComputedRef<MarketRegion>
   loaded: Ref<boolean>
-  addWatch: (code: string) => Promise<AddWatchResult>
+  addWatch: (code: string, position?: MarketPosition) => Promise<AddWatchResult>
+  updatePosition: (
+    symbol: string,
+    position: MarketPosition
+  ) => Promise<WatchItem | null>
   removeWatch: (symbol: string) => Promise<boolean>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<boolean>
@@ -83,8 +88,11 @@ export function useMarket(): UseMarket {
     settings.value = state.settings
   }
 
-  const addWatch = async (code: string): Promise<AddWatchResult> => {
-    const result = await window.api.market.addWatch(code)
+  const addWatch = async (
+    code: string,
+    position?: MarketPosition
+  ): Promise<AddWatchResult> => {
+    const result = await window.api.market.addWatch(code, position)
     if (result.ok) {
       const exists = watchlist.value.some(
         (item) => item.symbol === result.item.symbol
@@ -94,6 +102,27 @@ export function useMarket(): UseMarket {
       }
     }
     return result
+  }
+
+  /** 更新持仓；失败时回滚本地列表并返回 null */
+  const updatePosition = async (
+    symbol: string,
+    position: MarketPosition
+  ): Promise<WatchItem | null> => {
+    const previous = watchlist.value
+    try {
+      const updated = await window.api.market.updatePosition(symbol, position)
+      if (!updated) {
+        return null
+      }
+      watchlist.value = watchlist.value.map((item) =>
+        item.symbol === updated.symbol ? updated : item
+      )
+      return updated
+    } catch {
+      watchlist.value = previous
+      return null
+    }
   }
 
   const removeWatch = async (symbol: string): Promise<boolean> => {
@@ -160,6 +189,7 @@ export function useMarket(): UseMarket {
     region,
     loaded,
     addWatch,
+    updatePosition,
     removeWatch,
     refreshNow,
     setPaused,

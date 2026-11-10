@@ -51,6 +51,139 @@ export interface WatchItem {
   addedAt: number
   /** 排序值 */
   sortOrder: number
+  /** 持仓股数，0 表示只关注不持仓 */
+  shares: number
+  /** 每股成本价，0 表示未填写 */
+  cost: number
+}
+
+/** 自选股的持仓信息 */
+export interface MarketPosition {
+  /** 持仓股数 */
+  shares: number
+  /** 每股成本价 */
+  cost: number
+}
+
+/** 持仓盈亏汇总 */
+export interface PositionSummary {
+  /** 有持仓的条目数（含行情缺失的条目） */
+  heldCount: number
+  /** 持仓成本合计 */
+  totalCost: number
+  /** 持仓市值合计 */
+  marketValue: number
+  /** 今日盈亏合计 */
+  todayPnl: number
+  /** 今日盈亏率（百分数值）；分母为 0 时为 null */
+  todayPnlPercent: number | null
+  /** 累计盈亏合计 */
+  totalPnl: number
+  /** 累计收益率（百分数值）；持仓成本为 0 时为 null */
+  totalPnlPercent: number | null
+}
+
+/** 持仓数量上限 */
+const MAX_POSITION_SHARES = 1e9
+/** 每股成本上限 */
+const MAX_POSITION_COST = 1e6
+
+/** 是否填写了持仓（只关注不持仓返回 false） */
+export function hasPosition(item: WatchItem): boolean {
+  return item.shares > 0
+}
+
+/** 校验持仓数值：均为有限数且落在允许区间内 */
+export function isValidPosition(raw: unknown): raw is MarketPosition {
+  if (!raw || typeof raw !== 'object') {
+    return false
+  }
+  const { shares, cost } = raw as Partial<MarketPosition>
+  return (
+    typeof shares === 'number' &&
+    Number.isFinite(shares) &&
+    shares >= 0 &&
+    shares <= MAX_POSITION_SHARES &&
+    typeof cost === 'number' &&
+    Number.isFinite(cost) &&
+    cost >= 0 &&
+    cost <= MAX_POSITION_COST
+  )
+}
+
+/** 规范化持仓：缺省或非法一律回退为 { shares: 0, cost: 0 } */
+export function normalizePosition(raw: unknown): MarketPosition {
+  return isValidPosition(raw)
+    ? { shares: raw.shares, cost: raw.cost }
+    : { shares: 0, cost: 0 }
+}
+
+/**
+ * 汇总持仓盈亏。
+ *
+ * 只统计 shares > 0 的条目；行情缺失（quote 缺失、missing、price 为 null）
+ * 的条目不参与市值与盈亏计算，但计入 heldCount。昨收缺失的条目不参与
+ * 今日盈亏与今日盈亏率。收益率分母为 0 时返回 null，避免 NaN / Infinity。
+ */
+export function computePositionSummary(
+  quotes: Quote[],
+  watchlist: WatchItem[]
+): PositionSummary {
+  const quoteMap = new Map(quotes.map((quote) => [quote.symbol, quote]))
+  let heldCount = 0
+  let totalCost = 0
+  let marketValue = 0
+  let todayPnl = 0
+  let todayBase = 0
+  let totalPnl = 0
+  for (const item of watchlist) {
+    if (!hasPosition(item)) {
+      continue
+    }
+    heldCount += 1
+    const quote = quoteMap.get(item.symbol)
+    if (!quote || quote.missing || quote.price === null) {
+      continue
+    }
+    const price = quote.price
+    marketValue += price * item.shares
+    totalCost += item.cost * item.shares
+    totalPnl += (price - item.cost) * item.shares
+    if (quote.prevClose !== null) {
+      todayPnl += (price - quote.prevClose) * item.shares
+      todayBase += quote.prevClose * item.shares
+    }
+  }
+  return {
+    heldCount,
+    totalCost,
+    marketValue,
+    todayPnl,
+    todayPnlPercent: todayBase === 0 ? null : (todayPnl / todayBase) * 100,
+    totalPnl,
+    totalPnlPercent: totalCost === 0 ? null : (totalPnl / totalCost) * 100
+  }
+}
+
+/** 金额：千分位 + 两位小数，如 '1,234.50' */
+export function formatMoney(value: number): string {
+  const fixed = Math.abs(value).toFixed(2)
+  const [integer, fraction] = fixed.split('.')
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  const sign = value < 0 && fixed !== '0.00' ? '-' : ''
+  return `${sign}${grouped}.${fraction}`
+}
+
+/** 带正负号的金额：正值带 '+'、负值带 '-'、零无符号 */
+export function formatSignedMoney(value: number): string {
+  const amount = formatMoney(Math.abs(value))
+  if (value > 0) {
+    return `+${amount}`
+  }
+  if (value < 0) {
+    return `-${amount}`
+  }
+  return amount
 }
 
 /** 页面设置 */
@@ -107,6 +240,7 @@ export interface MarketState {
 export const MARKET_CHANNELS = {
   getState: 'market:get-state',
   addWatch: 'market:add-watch',
+  updatePosition: 'market:update-position',
   removeWatch: 'market:remove-watch',
   refreshNow: 'market:refresh-now',
   setPaused: 'market:set-paused',
@@ -127,7 +261,11 @@ export type AddWatchResult =
 /** preload 暴露给渲染层的行情 API */
 export interface MarketApi {
   getState: () => Promise<MarketState>
-  addWatch: (code: string) => Promise<AddWatchResult>
+  addWatch: (code: string, position?: MarketPosition) => Promise<AddWatchResult>
+  updatePosition: (
+    symbol: string,
+    position: MarketPosition
+  ) => Promise<WatchItem | null>
   removeWatch: (symbol: string) => Promise<WatchItem[]>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<void>

@@ -53,6 +53,11 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      # 内置口播运行时目前只覆盖 Windows 与 macOS，Linux 走系统 ffmpeg 兜底
+      - name: 准备内置运行时资源
+        if: matrix.name != 'linux'
+        run: pnpm run assets:fetch
+
       - name: 构建应用
         run: pnpm run build
 

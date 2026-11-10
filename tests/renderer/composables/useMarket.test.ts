@@ -43,7 +43,9 @@ function makeWatch(symbol: string, addedAt = 0): WatchItem {
         : 'sh',
     name: symbol,
     addedAt,
-    sortOrder: addedAt
+    sortOrder: addedAt,
+    shares: 0,
+    cost: 0
   }
 }
 

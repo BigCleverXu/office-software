@@ -9,8 +9,10 @@ import {
 import {
   MARKET_CHANNELS,
   type MarketApi,
+  type MarketPosition,
   type MarketRegion,
-  type MarketState
+  type MarketState,
+  type WatchItem
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
 import {
@@ -126,8 +128,13 @@ const alarms: AlarmApi = {
 
 const market: MarketApi = {
   getState: () => ipcRenderer.invoke(MARKET_CHANNELS.getState),
-  addWatch: (code: string) =>
-    ipcRenderer.invoke(MARKET_CHANNELS.addWatch, code),
+  addWatch: (code: string, position?: MarketPosition) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.addWatch, code, position),
+  updatePosition: (
+    symbol: string,
+    position: MarketPosition
+  ): Promise<WatchItem | null> =>
+    ipcRenderer.invoke(MARKET_CHANNELS.updatePosition, symbol, position),
   removeWatch: (symbol: string) =>
     ipcRenderer.invoke(MARKET_CHANNELS.removeWatch, symbol),
   refreshNow: () => ipcRenderer.invoke(MARKET_CHANNELS.refreshNow),

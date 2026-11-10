@@ -2,8 +2,11 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   codeFromSymbol,
   isMarketRegion,
+  isValidPosition,
   normalizeCode,
+  normalizePosition,
   type MarketId,
+  type MarketPosition,
   type MarketSettings,
   type WatchItem
 } from '../shared/market'
@@ -36,13 +39,19 @@ function rowToWatchItem(row: WatchlistRow): WatchItem {
       market = derived.market
     }
   }
+  const position = normalizePosition({
+    shares: row.shares,
+    cost: row.cost
+  })
   return {
     code: code || codeFromSymbol(symbol),
     symbol,
     market: market as MarketId,
     name: row.name,
     addedAt: row.added_at,
-    sortOrder: row.sort_order
+    sortOrder: row.sort_order,
+    shares: position.shares,
+    cost: position.cost
   }
 }
 
@@ -106,17 +115,20 @@ export class MarketStore {
   /**
    * 新增自选股；同 symbol 已存在时直接返回已存在的条目（不重复写入）。
    * addedAt 由本方法写入，sortOrder 取当前最大值 + 1（空表为 0）。
+   * position 缺省或非法时按 { shares: 0, cost: 0 } 写入。
    */
   addWatch(item: {
     code: string
     symbol: string
     market: MarketId
     name: string
+    position?: MarketPosition
   }): WatchItem {
     const existing = this.findBySymbol(item.symbol)
     if (existing) {
       return existing
     }
+    const position = normalizePosition(item.position)
     const addedAt = Date.now()
     let sortOrder = 0
     this.db.exec('BEGIN')
@@ -128,10 +140,19 @@ export class MarketStore {
       this.db
         .prepare(
           `INSERT INTO watchlist (
-            symbol, code, market, name, added_at, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?)`
+            symbol, code, market, name, added_at, sort_order, shares, cost
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(item.symbol, item.code, item.market, item.name, addedAt, sortOrder)
+        .run(
+          item.symbol,
+          item.code,
+          item.market,
+          item.name,
+          addedAt,
+          sortOrder,
+          position.shares,
+          position.cost
+        )
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -143,8 +164,26 @@ export class MarketStore {
       market: item.market,
       name: item.name,
       addedAt,
-      sortOrder
+      sortOrder,
+      shares: position.shares,
+      cost: position.cost
     }
+  }
+
+  /**
+   * 更新某条自选股的持仓数量与成本。
+   * symbol 不存在或持仓数值非法时返回 null 且不写库；
+   * 成功返回更新后的条目。
+   */
+  updatePosition(symbol: string, position: MarketPosition): WatchItem | null {
+    const current = this.findBySymbol(symbol)
+    if (!current || !isValidPosition(position)) {
+      return null
+    }
+    this.db
+      .prepare('UPDATE watchlist SET shares = ?, cost = ? WHERE symbol = ?')
+      .run(position.shares, position.cost, symbol)
+    return { ...current, shares: position.shares, cost: position.cost }
   }
 
   /** 删除自选股，返回删除后的列表副本；symbol 不存在时列表不变 */

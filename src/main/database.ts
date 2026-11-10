@@ -6,6 +6,7 @@ import { app } from 'electron'
 import {
   codeFromSymbol,
   normalizeCode,
+  normalizePosition,
   type MarketSettings,
   type WatchItem
 } from '../shared/market'
@@ -21,7 +22,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -113,6 +114,20 @@ CREATE TABLE IF NOT EXISTS quick_site_groups (
 CREATE INDEX IF NOT EXISTS idx_quick_site_groups_sort ON quick_site_groups(sort_order);
 `
 
+/** watchlist 表建表语句（v9 增加持仓列，也用于旧版本升级） */
+const WATCHLIST_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS watchlist (
+  symbol     TEXT PRIMARY KEY,
+  code       TEXT NOT NULL,
+  market     TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  added_at   INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  shares     REAL NOT NULL DEFAULT 0,
+  cost       REAL NOT NULL DEFAULT 0
+);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -128,14 +143,7 @@ CREATE TABLE IF NOT EXISTS alarms (
   created_at     INTEGER NOT NULL,
   last_fired_at  INTEGER
 );
-CREATE TABLE IF NOT EXISTS watchlist (
-  symbol     TEXT PRIMARY KEY,
-  code       TEXT NOT NULL,
-  market     TEXT NOT NULL,
-  name       TEXT NOT NULL DEFAULT '',
-  added_at   INTEGER NOT NULL,
-  sort_order INTEGER NOT NULL DEFAULT 0
-);
+${WATCHLIST_TABLE_SQL}
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -169,6 +177,8 @@ interface WatchlistRow {
   name: string
   added_at: number
   sort_order: number
+  shares: number
+  cost: number
 }
 
 /** settings 表行结构 */
@@ -292,7 +302,8 @@ function backfillQuickSiteTargets(db: DatabaseSync): void {
  * countdowns / holiday_cache 表；v4 之前补 file_index 表及其索引；
  * v5 之前为 notes 补 category 列；v6 之前补 quick_sites 表；
  * v7 之前补 quick_site_groups 表；v8 之前为 quick_sites 补 targets 列
- * 并用旧的 browser_id / profile_id 回填；已是最新版本则直接返回。
+ * 并用旧的 browser_id / profile_id 回填；v9 之前为 watchlist 补持仓列；
+ * 已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -340,12 +351,39 @@ function applySchema(db: DatabaseSync): void {
       // v1–v7 -> v8：按旧列回填 targets，空字符串表示尚未回填
       backfillQuickSiteTargets(db)
     }
+    if (version >= 1 && version < 9) {
+      // v1–v8 -> v9：确保 watchlist 存在（历史库必然有，这里兼容缺表），
+      // 再按缺失列补持仓数量与成本，已有新列时不重复 ALTER
+      db.exec(WATCHLIST_TABLE_SQL)
+      const columns = tableColumns(db, 'watchlist')
+      if (!columns.includes('shares')) {
+        db.exec(
+          'ALTER TABLE watchlist ADD COLUMN shares REAL NOT NULL DEFAULT 0'
+        )
+      }
+      if (!columns.includes('cost')) {
+        db.exec('ALTER TABLE watchlist ADD COLUMN cost REAL NOT NULL DEFAULT 0')
+      }
+    }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
     throw error
   }
+}
+
+/** 表结构列名查询结果 */
+interface TableColumnRow {
+  name: string
+}
+
+/** 读取某张表的列名 */
+function tableColumns(db: DatabaseSync, table: string): string[] {
+  const rows = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as unknown as TableColumnRow[]
+  return rows.map((row) => row.name)
 }
 
 /** 判断某张表是否为空 */
@@ -395,13 +433,19 @@ function normalizeItem(raw: Partial<WatchItem>): WatchItem | null {
     symbol = derived.symbol
     market = derived.market
   }
+  const position = normalizePosition({
+    shares: raw.shares,
+    cost: raw.cost
+  })
   return {
     code: code || codeFromSymbol(symbol),
     symbol,
     market,
     name: typeof raw.name === 'string' ? raw.name : '',
     addedAt: typeof raw.addedAt === 'number' ? raw.addedAt : Date.now(),
-    sortOrder: typeof raw.sortOrder === 'number' ? raw.sortOrder : 0
+    sortOrder: typeof raw.sortOrder === 'number' ? raw.sortOrder : 0,
+    shares: position.shares,
+    cost: position.cost
   }
 }
 
@@ -505,8 +549,8 @@ function migrateMarket(db: DatabaseSync, filePath: string): void {
   const settings = normalizeSettings(record.settings)
   const insertItem = db.prepare(
     `INSERT INTO watchlist (
-      symbol, code, market, name, added_at, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?)`
+      symbol, code, market, name, added_at, sort_order, shares, cost
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const insertSetting = db.prepare(
     'INSERT INTO settings (key, value) VALUES (?, ?)'
@@ -520,7 +564,9 @@ function migrateMarket(db: DatabaseSync, filePath: string): void {
         item.market,
         item.name,
         item.addedAt,
-        item.sortOrder
+        item.sortOrder,
+        item.shares,
+        item.cost
       )
     }
     insertSetting.run('paused', JSON.stringify(settings.paused))

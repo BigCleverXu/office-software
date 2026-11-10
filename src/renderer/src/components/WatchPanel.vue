@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import { LineChart, Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
+import { LineChart, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
+import { formatMoney } from '@shared/market'
 import type {
   MarketRegion,
   MarketSnapshot,
@@ -33,12 +34,19 @@ const props = defineProps<{
 const emit = defineEmits<{
   add: []
   remove: [symbol: string]
+  'edit-position': [item: WatchItem]
   retry: []
 }>()
 
 /** 表格中中性数值单元与涨跌数值单元的公共样式 */
 const MUTED_CELL = 'text-muted-foreground px-2 py-2 text-right tabular-nums'
 const TONE_CELL = 'px-2 py-2 text-right tabular-nums'
+
+/** 持仓股数：整数省略小数位，其余保留两位 */
+const formatShares = (value: number): string => {
+  const text = formatMoney(value)
+  return Number.isInteger(value) ? text.slice(0, -3) : text
+}
 
 interface Row {
   item: WatchItem
@@ -48,6 +56,8 @@ interface Row {
   price: string
   change: string
   changePercent: string
+  shares: string
+  cost: string
   open: string
   high: string
   low: string
@@ -59,6 +69,7 @@ interface Row {
 const buildRow = (item: WatchItem, quote: Quote | null): Row => {
   const missing = quote === null || quote.missing
   const source = missing ? null : quote
+  const held = item.shares > 0
   return {
     item,
     missing,
@@ -67,6 +78,8 @@ const buildRow = (item: WatchItem, quote: Quote | null): Row => {
     price: formatPrice(source?.price ?? null),
     change: formatSigned(source?.change ?? null),
     changePercent: formatPercent(source?.changePercent ?? null),
+    shares: held ? `${formatShares(item.shares)} 股` : '',
+    cost: held ? `成本 ${formatMoney(item.cost)}` : '',
     open: formatPrice(source?.open ?? null),
     high: formatPrice(source?.high ?? null),
     low: formatPrice(source?.low ?? null),
@@ -181,7 +194,7 @@ defineExpose({ highlight })
       class="bg-card shadow-soft overflow-hidden rounded-xl border border-border/70"
     >
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[760px] text-left text-sm">
+        <table class="w-full min-w-[880px] text-left text-sm">
           <thead>
             <tr class="bg-muted/50 text-muted-foreground border-b text-xs">
               <th class="px-2 py-2 font-medium">名称</th>
@@ -189,12 +202,13 @@ defineExpose({ highlight })
               <th class="px-2 py-2 text-right font-medium">现价</th>
               <th class="px-2 py-2 text-right font-medium">涨跌额</th>
               <th class="px-2 py-2 text-right font-medium">涨跌幅</th>
+              <th class="px-2 py-2 text-right font-medium">持仓</th>
               <th class="px-2 py-2 text-right font-medium">今开</th>
               <th class="px-2 py-2 text-right font-medium">最高</th>
               <th class="px-2 py-2 text-right font-medium">最低</th>
               <th class="px-2 py-2 text-right font-medium">成交额</th>
               <th class="px-2 py-2 text-right font-medium">更新时间</th>
-              <th class="w-10 px-2 py-2" />
+              <th class="w-16 px-2 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -221,26 +235,50 @@ defineExpose({ highlight })
               <td :class="[TONE_CELL, row.tone]">{{ row.price }}</td>
               <td :class="[TONE_CELL, row.tone]">{{ row.change }}</td>
               <td :class="[TONE_CELL, row.tone]">{{ row.changePercent }}</td>
+              <td class="px-2 py-2 text-right tabular-nums">
+                <div v-if="row.shares" class="flex flex-col">
+                  <span>{{ row.shares }}</span>
+                  <span class="text-muted-foreground text-xs">
+                    {{ row.cost }}
+                  </span>
+                </div>
+                <span v-else class="text-muted-foreground">--</span>
+              </td>
               <td :class="MUTED_CELL">{{ row.open }}</td>
               <td :class="MUTED_CELL">{{ row.high }}</td>
               <td :class="MUTED_CELL">{{ row.low }}</td>
               <td :class="MUTED_CELL">{{ row.amount }}</td>
               <td :class="MUTED_CELL">{{ row.time }}</td>
-              <td class="px-2 py-2 text-right">
-                <Tooltip>
-                  <TooltipTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      :aria-label="deleteLabel"
-                      class="text-destructive hover:text-destructive"
-                      @click="emit('remove', row.item.symbol)"
-                    >
-                      <Trash2 />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>删除</TooltipContent>
-                </Tooltip>
+              <td class="px-2 py-2">
+                <div class="flex items-center justify-end gap-1">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="编辑持仓"
+                        @click="emit('edit-position', row.item)"
+                      >
+                        <Pencil />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>编辑持仓</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        :aria-label="deleteLabel"
+                        class="text-destructive hover:text-destructive"
+                        @click="emit('remove', row.item.symbol)"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>删除</TooltipContent>
+                  </Tooltip>
+                </div>
               </td>
             </tr>
           </tbody>

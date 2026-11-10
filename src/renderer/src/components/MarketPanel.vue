@@ -4,13 +4,21 @@ import { useTimeoutFn } from '@vueuse/core'
 import { RefreshCw } from 'lucide-vue-next'
 import {
   codeFromSymbol,
+  computePositionSummary,
   normalizeCode,
   normalizeUsSymbol
 } from '@shared/market'
-import type { AddWatchResult, MarketRegion } from '@shared/market'
+import type {
+  AddWatchResult,
+  MarketPosition,
+  MarketRegion,
+  WatchItem
+} from '@shared/market'
 import AddWatchDialog from '@/components/AddWatchDialog.vue'
 import IndexCard from '@/components/IndexCard.vue'
 import MarketSwitch from '@/components/MarketSwitch.vue'
+import PositionDialog from '@/components/PositionDialog.vue'
+import PositionSummary from '@/components/PositionSummary.vue'
 import WatchPanel from '@/components/WatchPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -26,6 +34,7 @@ const {
   settings,
   region,
   addWatch,
+  updatePosition,
   removeWatch,
   refreshNow,
   setPaused,
@@ -33,6 +42,8 @@ const {
 } = useMarket()
 
 const dialogOpen = ref(false)
+const positionDialogOpen = ref(false)
+const editingItem = ref<WatchItem | null>(null)
 const watchPanelRef = ref<InstanceType<typeof WatchPanel> | null>(null)
 
 /** 写操作失败提示，3 秒后自动清除 */
@@ -58,6 +69,11 @@ const activeSnapshot = computed(() =>
 
 const activeWatchlist = computed(() =>
   region.value === 'us' ? usWatchlist.value : cnWatchlist.value
+)
+
+/** 当前市场的持仓盈亏汇总 */
+const positionSummary = computed(() =>
+  computePositionSummary(activeSnapshot.value.quotes, activeWatchlist.value)
 )
 
 const FOOTER_TEXT =
@@ -87,8 +103,11 @@ const handleRegionChange = (next: MarketRegion): void => {
  * 添加入口：重复添加时高亮既有行 2 秒，其余结果原样返回给弹窗。
  * 符号规则按当前市场区分：A 股 6 位代码、美股 ticker。
  */
-const handleAdd = async (code: string): Promise<AddWatchResult> => {
-  const result = await addWatch(code)
+const handleAdd = async (
+  code: string,
+  position: MarketPosition
+): Promise<AddWatchResult> => {
+  const result = await addWatch(code, position)
   if (!result.ok && result.reason === 'duplicate') {
     const normalized =
       region.value === 'us' ? normalizeUsSymbol(code) : normalizeCode(code)
@@ -97,6 +116,29 @@ const handleAdd = async (code: string): Promise<AddWatchResult> => {
     }
   }
   return result
+}
+
+/** 打开编辑持仓弹窗，预填当前持仓 */
+const handleEditPosition = (item: WatchItem): void => {
+  editingItem.value = item
+  positionDialogOpen.value = true
+}
+
+/** 保存持仓：成功返回 true，失败提示并保持弹窗打开 */
+const handleSavePosition = async (
+  position: MarketPosition
+): Promise<boolean> => {
+  const item = editingItem.value
+  if (!item) {
+    return false
+  }
+  const updated = await updatePosition(item.symbol, position)
+  if (!updated) {
+    showNotice('保存持仓失败，请稍后重试')
+    return false
+  }
+  editingItem.value = updated
+  return true
 }
 
 const handleRemove = async (symbol: string): Promise<void> => {
@@ -153,6 +195,8 @@ const handleRetry = (): void => {
           />
         </div>
 
+        <PositionSummary :summary="positionSummary" :region="region" />
+
         <WatchPanel
           ref="watchPanelRef"
           :region="region"
@@ -161,6 +205,7 @@ const handleRetry = (): void => {
           :snapshot="activeSnapshot"
           @add="openAddDialog"
           @remove="handleRemove"
+          @edit-position="handleEditPosition"
           @retry="handleRetry"
         />
       </div>
@@ -176,6 +221,12 @@ const handleRetry = (): void => {
       v-model:open="dialogOpen"
       :region="region"
       :on-add="handleAdd"
+    />
+
+    <PositionDialog
+      v-model:open="positionDialogOpen"
+      :item="editingItem"
+      :on-save="handleSavePosition"
     />
   </div>
 </template>

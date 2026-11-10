@@ -74,6 +74,76 @@ describe('MarketStore.addWatch', () => {
   })
 })
 
+describe('MarketStore.addWatch 持仓', () => {
+  it('带持仓写入并持久化', () => {
+    const added = store.addWatch({
+      ...maotai,
+      position: { shares: 100, cost: 12.5 }
+    })
+
+    expect(added.shares).toBe(100)
+    expect(added.cost).toBe(12.5)
+    expect(new MarketStore(db).getWatchlist()[0]).toMatchObject({
+      shares: 100,
+      cost: 12.5
+    })
+  })
+
+  it('非法持仓按 0 写入', () => {
+    const added = store.addWatch({
+      ...maotai,
+      position: { shares: -1, cost: 10 }
+    })
+
+    expect(added.shares).toBe(0)
+    expect(added.cost).toBe(0)
+  })
+})
+
+describe('MarketStore.updatePosition', () => {
+  it('写入成功并持久化', () => {
+    store.addWatch(maotai)
+
+    const updated = store.updatePosition('sh600519', { shares: 200, cost: 15 })
+
+    expect(updated).toMatchObject({ shares: 200, cost: 15 })
+    expect(new MarketStore(db).getWatchlist()[0]).toMatchObject({
+      shares: 200,
+      cost: 15
+    })
+  })
+
+  it('清空持仓把数量与成本写为 0', () => {
+    store.addWatch({ ...maotai, position: { shares: 100, cost: 10 } })
+
+    const updated = store.updatePosition('sh600519', { shares: 0, cost: 0 })
+
+    expect(updated).toMatchObject({ shares: 0, cost: 0 })
+    expect(store.getWatchlist()[0]).toMatchObject({ shares: 0, cost: 0 })
+  })
+
+  it('非法值返回 null 且原值不变', () => {
+    store.addWatch({ ...maotai, position: { shares: 100, cost: 10 } })
+
+    expect(
+      store.updatePosition('sh600519', { shares: Number.NaN, cost: 10 })
+    ).toBeNull()
+    expect(
+      store.updatePosition('sh600519', { shares: 100, cost: -1 })
+    ).toBeNull()
+    expect(
+      store.updatePosition('sh600519', { shares: 1e9 + 1, cost: 10 })
+    ).toBeNull()
+    expect(store.getWatchlist()[0]).toMatchObject({ shares: 100, cost: 10 })
+  })
+
+  it('symbol 不存在返回 null', () => {
+    expect(
+      store.updatePosition('sh000000', { shares: 100, cost: 10 })
+    ).toBeNull()
+  })
+})
+
 describe('MarketStore.removeWatch', () => {
   it('返回删除后的列表；不存在 symbol 不报错且列表不变', () => {
     store.addWatch(maotai)

@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { normalizeCode, normalizeUsSymbol } from '@shared/market'
-import type { AddWatchResult, MarketRegion } from '@shared/market'
+import {
+  isValidPosition,
+  normalizeCode,
+  normalizeUsSymbol
+} from '@shared/market'
+import type {
+  AddWatchResult,
+  MarketPosition,
+  MarketRegion
+} from '@shared/market'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -17,10 +25,14 @@ const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
   region: MarketRegion
-  onAdd: (code: string) => Promise<AddWatchResult>
+  onAdd: (code: string, position: MarketPosition) => Promise<AddWatchResult>
 }>()
 
 type AddWatchFailure = Extract<AddWatchResult, { ok: false }>['reason']
+
+/** 持仓数值非法时的提示文案，与编辑持仓弹窗保持一致 */
+const INVALID_POSITION_MESSAGE =
+  '持仓数量需为 0 到 1000000000 的数字，成本价需为 0 到 1000000 的数字'
 
 /** 非代码格式错误的失败原因文案，两个市场共用 */
 const REASON_MESSAGES: Record<
@@ -69,12 +81,16 @@ const copy = computed<RegionCopy>(() =>
 )
 
 const code = ref('')
+const sharesText = ref('')
+const costText = ref('')
 const error = ref('')
 const submitting = ref(false)
 
 watch(open, (isOpen) => {
   if (!isOpen) return
   code.value = ''
+  sharesText.value = ''
+  costText.value = ''
   error.value = ''
   submitting.value = false
 })
@@ -102,15 +118,28 @@ const isValidCode = (): boolean =>
     ? normalizeUsSymbol(code.value) !== null
     : normalizeCode(code.value) !== null
 
+/** 解析可选的持仓输入：留空按 0 处理，非法或越界返回 null */
+const parsePosition = (): MarketPosition | null => {
+  const shares = sharesText.value.trim() === '' ? 0 : Number(sharesText.value)
+  const cost = costText.value.trim() === '' ? 0 : Number(costText.value)
+  const position: MarketPosition = { shares, cost }
+  return isValidPosition(position) ? position : null
+}
+
 const handleSubmit = async (): Promise<void> => {
   error.value = ''
   if (!isValidCode()) {
     error.value = INVALID_CODE_MESSAGES[props.region]
     return
   }
+  const position = parsePosition()
+  if (!position) {
+    error.value = INVALID_POSITION_MESSAGE
+    return
+  }
   submitting.value = true
   try {
-    const result = await props.onAdd(code.value.trim())
+    const result = await props.onAdd(code.value.trim(), position)
     if (result.ok) {
       open.value = false
       return
@@ -140,6 +169,24 @@ const handleSubmit = async (): Promise<void> => {
           @input="clearError"
           @keydown.enter="handleSubmit"
         />
+        <div class="grid grid-cols-2 gap-2">
+          <Input
+            v-model="sharesText"
+            type="text"
+            inputmode="decimal"
+            placeholder="持仓数量（选填）"
+            @input="clearError"
+            @keydown.enter="handleSubmit"
+          />
+          <Input
+            v-model="costText"
+            type="text"
+            inputmode="decimal"
+            placeholder="成本价（选填）"
+            @input="clearError"
+            @keydown.enter="handleSubmit"
+          />
+        </div>
         <p v-if="error" class="text-destructive text-sm">{{ error }}</p>
       </div>
 

@@ -2,29 +2,36 @@ import { describe, expect, it } from 'vitest'
 import {
   closedReasonText,
   codeFromSymbol,
+  computePositionSummary,
   directionOf,
   etParts,
   formatAmount,
   formatClockTime,
   formatDateLabel,
+  formatMoney,
   formatPercent,
   formatPrice,
   formatSigned,
+  formatSignedMoney,
+  hasPosition,
   indexNameOf,
   indexSymbolsOf,
   isMarketRegion,
   isSameTradingSession,
+  isValidPosition,
   isTradingDay,
   isTradingTime,
   marketFromSymbol,
   nextOpenAt,
   nextUsOpenStart,
   normalizeCode,
+  normalizePosition,
   normalizeUsSymbol,
   symbolFromCode,
   usClosedReason,
   usMarketOpen
 } from '../../src/shared/market'
+import type { Quote, WatchItem } from '../../src/shared/market'
 
 // 2026-01-05 周一、01-06 周二、01-09 周五
 // 2026-01-03 周六、01-04 周日
@@ -497,5 +504,217 @@ describe('isMarketRegion', () => {
     expect(isMarketRegion('mars')).toBe(false)
     expect(isMarketRegion('')).toBe(false)
     expect(isMarketRegion(null)).toBe(false)
+  })
+})
+
+// ---------- 持仓与盈亏 ----------
+
+/** 构造一条行情快照，未使用的字段统一为 null */
+function quoteOf(
+  symbol: string,
+  price: number | null,
+  prevClose: number | null,
+  missing = false
+): Quote {
+  return {
+    symbol,
+    code: codeFromSymbol(symbol),
+    market: marketFromSymbol(symbol),
+    name: symbol,
+    price,
+    prevClose,
+    change: null,
+    changePercent: null,
+    open: null,
+    high: null,
+    low: null,
+    amount: null,
+    quoteTime: null,
+    missing
+  }
+}
+
+/** 构造一条带持仓的自选股 */
+function watchOf(symbol: string, shares: number, cost: number): WatchItem {
+  return {
+    code: codeFromSymbol(symbol),
+    symbol,
+    market: marketFromSymbol(symbol),
+    name: symbol,
+    addedAt: 0,
+    sortOrder: 0,
+    shares,
+    cost
+  }
+}
+
+describe('hasPosition', () => {
+  it('shares 大于 0 视为持仓', () => {
+    expect(hasPosition(watchOf('sh600519', 100, 10))).toBe(true)
+    expect(hasPosition(watchOf('sh600519', 0, 10))).toBe(false)
+  })
+})
+
+describe('isValidPosition / normalizePosition', () => {
+  it('区间内的有限数合法且原样返回', () => {
+    expect(isValidPosition({ shares: 100, cost: 12.5 })).toBe(true)
+    expect(normalizePosition({ shares: 100, cost: 12.5 })).toEqual({
+      shares: 100,
+      cost: 12.5
+    })
+    expect(isValidPosition({ shares: 0, cost: 0 })).toBe(true)
+  })
+
+  it('越界、非有限数或缺省时回退为 0', () => {
+    expect(isValidPosition({ shares: 1e9 + 1, cost: 0 })).toBe(false)
+    expect(isValidPosition({ shares: 0, cost: 1e6 + 1 })).toBe(false)
+    expect(isValidPosition({ shares: -1, cost: 0 })).toBe(false)
+    expect(isValidPosition({ shares: Number.NaN, cost: 0 })).toBe(false)
+    const infiniteShares = Number.POSITIVE_INFINITY
+    expect(isValidPosition({ shares: infiniteShares, cost: 0 })).toBe(false)
+    expect(isValidPosition({ shares: '100', cost: 1 })).toBe(false)
+    expect(isValidPosition(null)).toBe(false)
+    expect(normalizePosition(undefined)).toEqual({ shares: 0, cost: 0 })
+    expect(normalizePosition({ shares: 1e9 + 1, cost: 1 })).toEqual({
+      shares: 0,
+      cost: 0
+    })
+  })
+})
+
+describe('computePositionSummary', () => {
+  it('按现价、昨收与成本汇总多只持仓', () => {
+    const quotes = [quoteOf('sh600519', 12, 11), quoteOf('sz000001', 18, 19)]
+    const watchlist = [
+      watchOf('sh600519', 100, 10),
+      watchOf('sz000001', 200, 20)
+    ]
+
+    const summary = computePositionSummary(quotes, watchlist)
+
+    expect(summary.heldCount).toBe(2)
+    expect(summary.todayPnl).toBe(-100)
+    expect(summary.totalPnl).toBe(-200)
+    expect(summary.marketValue).toBe(4800)
+    expect(summary.totalCost).toBe(5000)
+    // 今日盈亏率 = -100 ÷ (11 × 100 + 19 × 200)
+    expect(summary.todayPnlPercent).toBeCloseTo((-100 / 4900) * 100)
+    expect(summary.totalPnlPercent).toBeCloseTo(-4)
+  })
+
+  it('行情缺失的条目不参与计算但保留持仓计数', () => {
+    const quotes = [
+      quoteOf('sh600519', null, 11),
+      quoteOf('sz000001', 18, 19, true)
+    ]
+    const watchlist = [
+      watchOf('sh600519', 100, 10),
+      watchOf('sz000001', 200, 20)
+    ]
+
+    const summary = computePositionSummary(quotes, watchlist)
+
+    expect(summary.heldCount).toBe(2)
+    expect(summary.todayPnl).toBe(0)
+    expect(summary.totalPnl).toBe(0)
+    expect(summary.marketValue).toBe(0)
+    expect(summary.totalCost).toBe(0)
+    expect(summary.todayPnlPercent).toBeNull()
+    expect(summary.totalPnlPercent).toBeNull()
+  })
+
+  it('部分行情缺失时只统计有行情的条目', () => {
+    const quotes = [
+      quoteOf('sh600519', 12, 11),
+      quoteOf('sz000001', null, 19, true)
+    ]
+    const watchlist = [
+      watchOf('sh600519', 100, 10),
+      watchOf('sz000001', 200, 20)
+    ]
+
+    const summary = computePositionSummary(quotes, watchlist)
+
+    expect(summary.heldCount).toBe(2)
+    expect(summary.todayPnl).toBe(100)
+    expect(summary.totalPnl).toBe(200)
+    expect(summary.marketValue).toBe(1200)
+    expect(summary.totalCost).toBe(1000)
+  })
+
+  it('成本为 0 时累计收益率为 null，但盈亏与市值照常统计', () => {
+    const summary = computePositionSummary(
+      [quoteOf('sh600519', 12, 11)],
+      [watchOf('sh600519', 100, 0)]
+    )
+
+    expect(summary.totalCost).toBe(0)
+    expect(summary.todayPnl).toBe(100)
+    expect(summary.totalPnl).toBe(1200)
+    expect(summary.marketValue).toBe(1200)
+    expect(summary.totalPnlPercent).toBeNull()
+    expect(summary.todayPnlPercent).toBeCloseTo((100 / 1100) * 100)
+  })
+
+  it('空列表各项为 0 且收益率为 null', () => {
+    expect(computePositionSummary([], [])).toEqual({
+      heldCount: 0,
+      totalCost: 0,
+      marketValue: 0,
+      todayPnl: 0,
+      todayPnlPercent: null,
+      totalPnl: 0,
+      totalPnlPercent: null
+    })
+  })
+
+  it('全部 shares 为 0 时不统计任何条目', () => {
+    const summary = computePositionSummary(
+      [quoteOf('sh600519', 12, 11)],
+      [watchOf('sh600519', 0, 10), watchOf('sz000001', 0, 20)]
+    )
+
+    expect(summary).toEqual({
+      heldCount: 0,
+      totalCost: 0,
+      marketValue: 0,
+      todayPnl: 0,
+      todayPnlPercent: null,
+      totalPnl: 0,
+      totalPnlPercent: null
+    })
+  })
+
+  it('缺失昨收与零成本组合也不会产生 NaN / Infinity', () => {
+    const summary = computePositionSummary(
+      [quoteOf('sh600519', 12, null)],
+      [watchOf('sh600519', 100, 0)]
+    )
+
+    expect(summary.todayPnl).toBe(0)
+    expect(summary.todayPnlPercent).toBeNull()
+    expect(summary.totalPnlPercent).toBeNull()
+    for (const value of Object.values(summary)) {
+      if (value !== null) {
+        expect(Number.isFinite(value)).toBe(true)
+      }
+    }
+  })
+})
+
+describe('formatMoney', () => {
+  it('千分位分隔并保留两位小数', () => {
+    expect(formatMoney(0)).toBe('0.00')
+    expect(formatMoney(1234.5)).toBe('1,234.50')
+    expect(formatMoney(-1234567.891)).toBe('-1,234,567.89')
+    expect(formatMoney(-0.001)).toBe('0.00')
+  })
+})
+
+describe('formatSignedMoney', () => {
+  it('正值带 +、负值带 -、零无符号', () => {
+    expect(formatSignedMoney(1234.5)).toBe('+1,234.50')
+    expect(formatSignedMoney(-1234.5)).toBe('-1,234.50')
+    expect(formatSignedMoney(0)).toBe('0.00')
   })
 })

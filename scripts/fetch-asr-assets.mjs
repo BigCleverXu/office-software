@@ -1,24 +1,30 @@
 #!/usr/bin/env node
 /**
- * 获取 ASR 内置资源（仅 Windows）
+ * 获取 ASR 内置资源（Windows / macOS）
  *
  * 用法：
  *   node scripts/fetch-asr-assets.mjs            首次获取 / 增量补齐（已存在的文件校验通过则跳过）
  *   node scripts/fetch-asr-assets.mjs --check    只校验，不下载
  *   node scripts/fetch-asr-assets.mjs --force    强制重新获取并更新 scripts/asr-assets.lock.json
  *
- * 产物：
- *   resources/whisper/main.exe
- *   resources/whisper/whisper.dll
- *   resources/whisper/ggml-base-q5_1.bin
- *   resources/ffmpeg/ffmpeg.exe
+ * 产物（仅当前构建平台，模型两平台共用）：
+ *   Windows：resources/whisper/main.exe
+ *            resources/whisper/whisper.dll
+ *            resources/whisper/ggml-base-q5_1.bin
+ *            resources/ffmpeg/ffmpeg.exe
+ *   macOS：  resources/whisper/whisper-cli（源码编译）
+ *            resources/whisper/ggml-base-q5_1.bin
+ *            resources/ffmpeg/ffmpeg
  *
- * 仅使用 Node 内置模块，不新增依赖。
+ * 平台差异由 scripts/asr-assets-plan.mjs 描述；仅使用 Node 内置模块，不新增依赖。
  */
 
 import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import {
+  accessSync,
+  chmodSync,
+  constants,
   copyFileSync,
   createReadStream,
   createWriteStream,
@@ -37,6 +43,7 @@ import { dirname, join, relative } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { resolveAssetPlan } from './asr-assets-plan.mjs'
 
 const require = createRequire(import.meta.url)
 
@@ -45,22 +52,6 @@ const RESOURCES_DIR = join(ROOT, 'resources')
 const WHISPER_DIR = join(RESOURCES_DIR, 'whisper')
 const FFMPEG_DIR = join(RESOURCES_DIR, 'ffmpeg')
 const LOCK_PATH = join(ROOT, 'scripts', 'asr-assets.lock.json')
-
-/** whisper.cpp v1.6.0 Windows x64 预编译包（直连 GitHub，失败时走加速镜像，仍以 SHA-256 校验） */
-const WHISPER_ZIP = {
-  urls: [
-    'https://github.com/ggml-org/whisper.cpp/releases/download/v1.6.0/whisper-bin-x64.zip',
-    'https://gh-proxy.com/https://github.com/ggml-org/whisper.cpp/releases/download/v1.6.0/whisper-bin-x64.zip',
-    'https://ghproxy.net/https://github.com/ggml-org/whisper.cpp/releases/download/v1.6.0/whisper-bin-x64.zip'
-  ],
-  sha256: '0F60FC3318772F4D678E0EB022B08E143D7E8F43C647C0ACFF5C68BB126B1B02',
-  size: 2249966
-}
-
-const WHISPER_FILES = [
-  { name: 'main.exe', size: 148480 },
-  { name: 'whisper.dll', size: 933888 }
-]
 
 const MODEL = {
   name: 'ggml-base-q5_1.bin',
@@ -71,7 +62,11 @@ const MODEL = {
   ]
 }
 
-const FFMPEG = { name: 'ffmpeg.exe' }
+/** 模型锁键两平台共用 */
+const MODEL_KEY = `shared/whisper/${MODEL.name}`
+
+/** 旧版模型锁键，用于向后兼容 */
+const MODEL_LEGACY_KEY = `whisper/${MODEL.name}`
 
 const BUDGET_BYTES = 160 * 1024 * 1024
 const MAX_RETRIES = 2
@@ -97,6 +92,16 @@ function fileSize(path) {
     return statSync(path).size
   } catch {
     return null
+  }
+}
+
+function isExecutable(path) {
+  if (!existsSync(path)) return false
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -127,8 +132,15 @@ function writeLock(entries) {
   log(`[写入] 哈希锁文件 ${relative(ROOT, LOCK_PATH)}`)
 }
 
-function lockEntry(lock, key) {
-  return lock?.files?.[key] ?? null
+/** 读取锁条目；新键不存在时回退旧的平台无关键 */
+function lockEntry(lock, key, legacyKeys = []) {
+  const files = lock?.files
+  if (!files) return null
+  if (files[key]) return files[key]
+  for (const legacy of legacyKeys) {
+    if (files[legacy]) return files[legacy]
+  }
+  return null
 }
 
 async function downloadToFile(url, dest, { timeoutMs, label }) {
@@ -224,16 +236,44 @@ function extractZip(zipPath, destDir) {
   }
 }
 
-function whisperFilesOk() {
-  return WHISPER_FILES.every(({ name, size }) => {
-    const p = join(WHISPER_DIR, name)
-    return existsSync(p) && fileSize(p) === size
-  })
+/** 执行外部命令，失败时抛出带 stderr 摘要的中文错误 */
+function runCommand(command, args, label) {
+  try {
+    return execFileSync(command, args, { stdio: 'pipe' })
+  } catch (err) {
+    const stderr =
+      err.stderr === undefined || err.stderr === null
+        ? ''
+        : err.stderr.toString('utf8')
+    const detail = stderr.trim().split('\n').slice(-5).join(' ') || err.message
+    throw new Error(`${label}失败：${detail}`)
+  }
 }
 
-async function acquireWhisperBinaries({ force }) {
-  if (!force && whisperFilesOk()) {
-    log('[跳过] resources/whisper 下 main.exe 与 whisper.dll 已存在且大小正确')
+/** 登记 whisper 产物到锁条目（按平台前缀） */
+async function registerWhisperEntries(plan, entries) {
+  for (const { name } of plan.whisper.files) {
+    const path = join(WHISPER_DIR, name)
+    if (!existsSync(path)) continue
+    entries[`${plan.platform}/whisper/${name}`] = {
+      sha256: (await hashFile(path)).toUpperCase(),
+      size: fileSize(path)
+    }
+  }
+}
+
+/** Windows：下载 whisper.cpp 预编译包并拷贝 main.exe / whisper.dll */
+async function acquireWhisperPrebuilt(plan, { force, entries }) {
+  const { files, zip } = plan.whisper
+  const names = files.map((file) => file.name).join(' 与 ')
+  const filesOk = files.every(({ name, size }) => {
+    const path = join(WHISPER_DIR, name)
+    return existsSync(path) && fileSize(path) === size
+  })
+
+  if (!force && filesOk) {
+    log(`[跳过] resources/whisper 下 ${names} 已存在且大小正确`)
+    await registerWhisperEntries(plan, entries)
     return
   }
 
@@ -245,7 +285,7 @@ async function acquireWhisperBinaries({ force }) {
   try {
     let downloaded = false
     let lastErr = null
-    for (const url of WHISPER_ZIP.urls) {
+    for (const url of zip.urls) {
       try {
         log(`[下载] whisper.cpp Windows 预编译包（约 2.2 MB）来源 ${url}`)
         await withRetries(async (attempt) => {
@@ -253,9 +293,9 @@ async function acquireWhisperBinaries({ force }) {
             timeoutMs: 180000,
             label: `whisper zip（第 ${attempt} 次）`
           })
-          if (received !== WHISPER_ZIP.size) {
+          if (received !== zip.size) {
             throw new Error(
-              `压缩包大小异常：期望 ${WHISPER_ZIP.size}，实际 ${received}`
+              `压缩包大小异常：期望 ${zip.size}，实际 ${received}`
             )
           }
         }, 'whisper zip 下载')
@@ -271,10 +311,8 @@ async function acquireWhisperBinaries({ force }) {
       fail(`whisper zip 下载失败：${lastErr?.message ?? '未知错误'}`)
 
     const actual = await hashFile(tmpZip)
-    if (actual.toUpperCase() !== WHISPER_ZIP.sha256.toUpperCase()) {
-      fail(
-        `whisper zip SHA-256 不匹配：期望 ${WHISPER_ZIP.sha256}，实际 ${actual}`
-      )
+    if (actual.toUpperCase() !== zip.sha256.toUpperCase()) {
+      fail(`whisper zip SHA-256 不匹配：期望 ${zip.sha256}，实际 ${actual}`)
     }
     log('[校验] whisper zip SHA-256 通过')
 
@@ -282,7 +320,7 @@ async function acquireWhisperBinaries({ force }) {
     log(`[解压] 使用 ${tool} 完成`)
 
     mkdirSync(WHISPER_DIR, { recursive: true })
-    for (const { name } of WHISPER_FILES) {
+    for (const { name } of files) {
       const matches = collectFiles(tmpExtract, name)
       if (matches.length === 0) fail(`压缩包内未找到 ${name}`)
       copyFileSync(matches[0], join(WHISPER_DIR, name))
@@ -294,12 +332,160 @@ async function acquireWhisperBinaries({ force }) {
     rmSync(tmpZip, { force: true })
     rmSync(tmpExtract, { recursive: true, force: true })
   }
+
+  await registerWhisperEntries(plan, entries)
+}
+
+/** 在解压目录中查找包含 CMakeLists.txt 的源码根目录 */
+function findSourceRoot(dir, depth = 0) {
+  if (existsSync(join(dir, 'CMakeLists.txt'))) return dir
+  if (depth >= 2) return null
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const found = findSourceRoot(join(dir, entry.name), depth + 1)
+    if (found !== null) return found
+  }
+  return null
+}
+
+/** 在构建目录中定位 whisper 可执行文件，排除动态库 */
+function findBuiltWhisper(buildDir, candidates) {
+  for (const name of candidates) {
+    for (const path of [join(buildDir, 'bin', name), join(buildDir, name)]) {
+      if (existsSync(path) && statSync(path).isFile()) return path
+    }
+  }
+  for (const name of candidates) {
+    const match = collectFiles(buildDir, name).find(
+      (path) => !/\.(dylib|so|dll|a)$/i.test(path)
+    )
+    if (match !== undefined) return match
+  }
+  return null
+}
+
+/** macOS：下载源码、CMake 编译并拷贝 whisper-cli */
+async function acquireWhisperFromSource(plan, { force, entries }) {
+  const file = plan.whisper.files[0]
+  const dest = join(WHISPER_DIR, file.name)
+
+  if (!force && isExecutable(dest)) {
+    log(`[跳过] ${relative(ROOT, dest)} 已存在且可执行`)
+    await registerWhisperEntries(plan, entries)
+    return
+  }
+
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'whisper-build-'))
+  const tarPath = join(tmpRoot, 'whisper-src.tar.gz')
+  const srcExtract = join(tmpRoot, 'src')
+  const buildDir = join(tmpRoot, 'build')
+  try {
+    try {
+      execFileSync('cmake', ['--version'], { stdio: 'pipe' })
+    } catch {
+      fail(
+        '未找到可用的 cmake，无法编译 whisper.cpp（macOS 可先执行 brew install cmake）'
+      )
+    }
+
+    const { version, urls } = plan.whisper.source
+    let downloaded = false
+    let lastErr = null
+    for (const url of urls) {
+      try {
+        log(`[下载] whisper.cpp 源码包（${version}）来源 ${url}`)
+        await withRetries(async (attempt) => {
+          const { received } = await downloadToFile(url, tarPath, {
+            timeoutMs: 300000,
+            label: `whisper 源码包（第 ${attempt} 次）`
+          })
+          if (received <= 0) throw new Error('源码包内容为空')
+        }, 'whisper 源码包下载')
+        downloaded = true
+        break
+      } catch (err) {
+        lastErr = err
+        rmSync(tarPath, { force: true })
+        log(`[警告] 来源失败：${err.message}`)
+      }
+    }
+    if (!downloaded)
+      fail(`whisper 源码包下载失败：${lastErr?.message ?? '未知错误'}`)
+
+    mkdirSync(srcExtract, { recursive: true })
+    runCommand('tar', ['-xzf', tarPath, '-C', srcExtract], '解压源码包')
+    log('[解压] 使用 tar -xzf 完成')
+
+    const sourceDir = findSourceRoot(srcExtract)
+    if (sourceDir === null) fail('源码包内未找到 CMakeLists.txt')
+    const sourceRoot = relative(tmpRoot, sourceDir)
+    log(`[源码] ${sourceRoot === '' ? 'whisper.cpp' : sourceRoot}`)
+
+    const { configure, fallbackConfigure } = plan.whisper.cmake
+    try {
+      runCommand(
+        'cmake',
+        ['-S', sourceDir, '-B', buildDir, ...configure],
+        '配置 whisper.cpp '
+      )
+      runCommand(
+        'cmake',
+        ['--build', buildDir, '--config', 'Release', '-j'],
+        '编译 whisper.cpp '
+      )
+    } catch (err) {
+      log(
+        `[警告] 默认参数构建失败（${err.message}），改用 -DGGML_METAL=OFF 重试一次`
+      )
+      rmSync(buildDir, { recursive: true, force: true })
+      try {
+        runCommand(
+          'cmake',
+          ['-S', sourceDir, '-B', buildDir, ...configure, ...fallbackConfigure],
+          '配置 whisper.cpp（Metal 关闭）'
+        )
+        runCommand(
+          'cmake',
+          ['--build', buildDir, '--config', 'Release', '-j'],
+          '编译 whisper.cpp（Metal 关闭）'
+        )
+      } catch (retryErr) {
+        fail(
+          `whisper.cpp 编译失败：${err.message}；关闭 Metal 重试仍失败：${retryErr.message}`
+        )
+      }
+    }
+
+    const candidates = file.outputCandidates ?? [file.name]
+    const built = findBuiltWhisper(buildDir, candidates)
+    if (built === null)
+      fail(
+        `构建产物中未找到 ${candidates.join(' 或 ')}（构建目录 ${relative(tmpRoot, buildDir)}）`
+      )
+
+    mkdirSync(WHISPER_DIR, { recursive: true })
+    copyFileSync(built, dest)
+    chmodSync(dest, plan.executableMode ?? 0o755)
+    log(`[拷贝] ${relative(ROOT, dest)}（${fmtBytes(fileSize(dest))}）`)
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true })
+  }
+
+  await registerWhisperEntries(plan, entries)
+}
+
+async function acquireWhisper(plan, { force, entries }) {
+  if (plan.whisper.kind === 'prebuilt-zip') {
+    await acquireWhisperPrebuilt(plan, { force, entries })
+    return
+  }
+  await acquireWhisperFromSource(plan, { force, entries })
 }
 
 async function acquireModel({ force, lock, entries, checkOnly }) {
   const dest = join(WHISPER_DIR, MODEL.name)
-  const key = `whisper/${MODEL.name}`
-  const expected = lockEntry(lock, key)
+  const key = MODEL_KEY
+  const expected = lockEntry(lock, key, [MODEL_LEGACY_KEY])
   const existing = existsSync(dest)
 
   if (checkOnly) {
@@ -386,10 +572,10 @@ async function acquireModel({ force, lock, entries, checkOnly }) {
   fail(`模型获取失败：${lastErr?.message ?? '未知错误'}`)
 }
 
-async function acquireFfmpeg({ force, lock, entries, checkOnly }) {
-  const dest = join(FFMPEG_DIR, FFMPEG.name)
-  const key = `ffmpeg/${FFMPEG.name}`
-  const expected = lockEntry(lock, key)
+async function acquireFfmpeg(plan, { force, lock, entries, checkOnly }) {
+  const dest = join(FFMPEG_DIR, plan.ffmpegName)
+  const key = `${plan.platform}/ffmpeg/${plan.ffmpegName}`
+  const expected = lockEntry(lock, key, [`ffmpeg/${plan.ffmpegName}`])
   const existing = existsSync(dest)
 
   if (checkOnly) {
@@ -426,11 +612,12 @@ async function acquireFfmpeg({ force, lock, entries, checkOnly }) {
     fail(`无法解析 ffmpeg-static：${err.message}`)
   }
   if (typeof source !== 'string' || !existsSync(source)) {
-    fail('ffmpeg-static 未提供可用的 ffmpeg.exe（请确认依赖已安装）')
+    fail(`ffmpeg-static 未提供可用的 ${plan.ffmpegName}（请确认依赖已安装）`)
   }
-  log(`[拷贝] ffmpeg.exe 来源 ${source}`)
+  log(`[拷贝] ${plan.ffmpegName} 来源 ${source}`)
   mkdirSync(FFMPEG_DIR, { recursive: true })
   copyFileSync(source, dest)
+  if (plan.chmod) chmodSync(dest, plan.executableMode ?? 0o755)
 
   const hash = await hashFile(dest)
   if (
@@ -447,6 +634,27 @@ async function acquireFfmpeg({ force, lock, entries, checkOnly }) {
   log(`[完成] ffmpeg ${relative(ROOT, dest)}（${fmtBytes(fileSize(dest))}）`)
 }
 
+/** 校验 whisper 产物：Windows 看大小，macOS 看存在且可执行 */
+function checkWhisper(plan) {
+  if (plan.whisper.kind === 'prebuilt-zip') {
+    for (const { name, size } of plan.whisper.files) {
+      const path = join(WHISPER_DIR, name)
+      if (!existsSync(path)) fail(`缺少 ${path}`)
+      if (fileSize(path) !== size)
+        fail(`${path} 大小异常：期望 ${size}，实际 ${fileSize(path)}`)
+    }
+    log('[校验] whisper 可执行文件通过')
+    return
+  }
+
+  const { name } = plan.whisper.files[0]
+  const dest = join(WHISPER_DIR, name)
+  if (!existsSync(dest)) fail(`缺少 ${dest}`)
+  if (!isExecutable(dest))
+    fail(`${relative(ROOT, dest)} 不可执行（缺少执行权限）`)
+  log(`[校验] ${name} 存在且可执行`)
+}
+
 function dirSize(dir) {
   if (!existsSync(dir)) return 0
   let total = 0
@@ -458,14 +666,13 @@ function dirSize(dir) {
   return total
 }
 
-function printReport() {
+function printReport(plan) {
   log('')
   log('========== ASR 资源清单 ==========')
   const files = [
-    join(WHISPER_DIR, 'main.exe'),
-    join(WHISPER_DIR, 'whisper.dll'),
+    ...plan.whisper.files.map((file) => join(WHISPER_DIR, file.name)),
     join(WHISPER_DIR, MODEL.name),
-    join(FFMPEG_DIR, FFMPEG.name)
+    join(FFMPEG_DIR, plan.ffmpegName)
   ]
   for (const file of files) {
     const size = fileSize(file)
@@ -493,37 +700,40 @@ async function main() {
   }
   const checkOnly = args.includes('--check')
   const force = args.includes('--force')
+  const plan = resolveAssetPlan(process.platform, process.arch)
 
   log(`[目标] ${RESOURCES_DIR}`)
-  if (process.platform !== 'win32') {
-    log(`[跳过] 仅 Windows 内置组件，跳过（当前平台 ${process.platform}）`)
+  if (!plan.supported) {
+    console.error(`[不支持] ${plan.unsupportedReason}`)
+    process.exitCode = 1
     return
   }
+  log(`[平台] ${plan.platform} ${plan.arch}（whisper ${plan.whisper.kind}）`)
 
   const lock = readLock()
   const entries = { ...(lock?.files ?? {}) }
 
   if (!checkOnly) {
-    await acquireWhisperBinaries({ force })
+    await acquireWhisper(plan, { force, entries })
     await acquireModel({ force, lock, entries, checkOnly })
-    await acquireFfmpeg({ force, lock, entries, checkOnly })
+    await acquireFfmpeg(plan, { force, lock, entries, checkOnly })
+    // 迁移旧的平台无关键：新键已登记，旧键不再保留
+    for (const key of Object.keys(entries)) {
+      if (/^(whisper|ffmpeg)\//.test(key)) {
+        delete entries[key]
+      }
+    }
     const changed =
       JSON.stringify(lock?.files ?? {}) !== JSON.stringify(entries)
     if (!lock || changed || force) writeLock(entries)
   } else {
     log('[校验] --check 模式，仅校验现有文件')
     await acquireModel({ force, lock, entries, checkOnly })
-    await acquireFfmpeg({ force, lock, entries, checkOnly })
-    for (const { name, size } of WHISPER_FILES) {
-      const p = join(WHISPER_DIR, name)
-      if (!existsSync(p)) fail(`缺少 ${p}`)
-      if (fileSize(p) !== size)
-        fail(`${p} 大小异常：期望 ${size}，实际 ${fileSize(p)}`)
-    }
-    log('[校验] whisper 可执行文件通过')
+    await acquireFfmpeg(plan, { force, lock, entries, checkOnly })
+    checkWhisper(plan)
   }
 
-  printReport()
+  printReport(plan)
   if (process.exitCode) return
   log(checkOnly ? '[结果] 校验通过' : '[结果] ASR 资源已就绪')
 }

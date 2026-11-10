@@ -1,13 +1,21 @@
 {
   "_说明": "ASR 资源期望哈希，由 scripts/fetch-asr-assets.mjs 维护；勿手工修改。",
-  "generatedAt": "2026-11-07T08:35:11.869Z",
+  "generatedAt": "2026-11-10T08:27:42.722Z",
   "files": {
-    "whisper/ggml-base-q5_1.bin": {
+    "win32/whisper/main.exe": {
+      "sha256": "F569E2D3378533629DAEEAB33D896A7414170466E9C792CA3F8D926334B45FFB",
+      "size": 148480
+    },
+    "win32/whisper/whisper.dll": {
+      "sha256": "B85FAE4FD5F4F4B2A482F8F5AD216EFF714D972156E1879A26AAC43E4FA101A2",
+      "size": 933888
+    },
+    "shared/whisper/ggml-base-q5_1.bin": {
       "sha256": "422F1AE452ADE6F30A004D7E5C6A43195E4433BC370BF23FAC9CC591F01A8898",
       "size": 59707625,
       "source": "hf-mirror"
     },
-    "ffmpeg/ffmpeg.exe": {
+    "win32/ffmpeg/ffmpeg.exe": {
       "sha256": "04E1307997530F9CF2FE35CBA2CA7E8875CA91DA02F89D6C7243DF819C94AD00",
       "size": 82797568
     }
