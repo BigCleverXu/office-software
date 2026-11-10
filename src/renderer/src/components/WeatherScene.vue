@@ -27,10 +27,23 @@ const scene = computed(() =>
     :class="[`scene-${scene.kind}`, `level-${scene.level}`]"
     aria-hidden="true"
   >
-    <!-- 太阳：呼吸核心 + 旋转光晕 -->
+    <!-- 太阳：简笔画火焰光芒 + 淡黄圆盘 + 笑脸 -->
     <div v-if="scene.kind === 'sun' || scene.kind === 'partly'" class="sun">
-      <span class="sun-glow"></span>
-      <span class="sun-core"></span>
+      <span class="sun-halo"></span>
+      <svg class="sun-art" viewBox="0 0 100 100" aria-hidden="true">
+        <path
+          class="sun-rays"
+          d="M 39.96 19.09 Q 42.72 15.76 45.4 6.24 Q 50 -1 54.6 6.24 Q 57.28 15.76 60.04 19.09 Q 64.24 18.03 72 11.89 Q 79.98 8.74 79.44 17.3 Q 76.01 26.58 76.29 30.9 Q 80.31 32.5 90.2 32.1 Q 98.5 34.24 93.04 40.85 Q 84.81 46.34 82.5 50 Q 84.81 53.66 93.04 59.15 Q 98.5 65.76 90.2 67.9 Q 80.31 67.5 76.29 69.1 Q 76.01 73.42 79.44 82.7 Q 79.98 91.26 72 88.11 Q 64.24 81.97 60.04 80.91 Q 57.28 84.24 54.6 93.76 Q 50 101 45.4 93.76 Q 42.72 84.24 39.96 80.91 Q 35.76 81.97 28 88.11 Q 20.02 91.26 20.56 82.7 Q 23.99 73.42 23.71 69.1 Q 19.69 67.5 9.8 67.9 Q 1.5 65.76 6.96 59.15 Q 15.19 53.66 17.5 50 Q 15.19 46.34 6.96 40.85 Q 1.5 34.24 9.8 32.1 Q 19.69 32.5 23.71 30.9 Q 23.99 26.58 20.56 17.3 Q 20.02 8.74 28 11.89 Q 35.76 18.03 39.96 19.09 Z"
+        />
+        <circle class="sun-disc" cx="50" cy="50" r="30" />
+        <g class="sun-face">
+          <path class="sun-eye" d="M 35.5 45.5 Q 40 39.5 44.5 45.5" />
+          <path class="sun-eye" d="M 55.5 45.5 Q 60 39.5 64.5 45.5" />
+          <path class="sun-mouth" d="M 43.5 56.5 Q 50 63.5 56.5 56.5" />
+          <ellipse class="sun-cheek" cx="34.5" cy="55" rx="4.6" ry="2.9" />
+          <ellipse class="sun-cheek" cx="65.5" cy="55" rx="4.6" ry="2.9" />
+        </g>
+      </svg>
     </div>
 
     <!-- 月亮：柔光圆盘 + 两处环形山阴影 -->
@@ -73,8 +86,13 @@ const scene = computed(() =>
 </template>
 
 <style scoped>
-/* 太阳：右上角，核心呼吸、光晕旋转 */
+/* 太阳：右上角简笔画，光芒清晰、描边为暖调墨色 */
 .sun {
+  --sun-ink: color-mix(
+    in oklab,
+    var(--color-weather-sun) 26%,
+    oklch(0.26 0.03 62)
+  );
   position: absolute;
   top: 8%;
   right: 10%;
@@ -82,39 +100,51 @@ const scene = computed(() =>
   height: 92px;
 }
 
-.sun-glow,
-.sun-core {
+/* 极淡暖色光晕，让太阳与卡片背景融合 */
+.sun-halo {
   position: absolute;
+  inset: -18%;
   border-radius: 50%;
-}
-
-.sun-glow {
-  inset: -6%;
-  background: repeating-conic-gradient(
-    from 0deg,
-    color-mix(in oklab, var(--color-weather-sun) 45%, transparent) 0deg 7deg,
-    transparent 7deg 22deg
-  );
-  filter: blur(3px);
-  opacity: 0.55;
-  animation: sun-spin 28s linear infinite;
-}
-
-.sun-core {
-  top: 50%;
-  left: 50%;
-  width: 34px;
-  height: 34px;
   background: radial-gradient(
     circle,
-    color-mix(in oklab, var(--color-weather-star) 92%, white) 0%,
-    color-mix(in oklab, var(--color-weather-sun) 78%, transparent) 58%,
-    transparent 100%
+    color-mix(in oklab, var(--color-weather-sun) 20%, transparent) 0%,
+    transparent 68%
   );
-  box-shadow: 0 0 22px
-    color-mix(in oklab, var(--color-weather-sun) 35%, transparent);
-  transform: translate(-50%, -50%);
+}
+
+.sun-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 50%;
   animation: sun-breathe 5s ease-in-out infinite;
+}
+
+.sun-rays {
+  fill: color-mix(in oklab, var(--color-weather-sun) 84%, white);
+  stroke: var(--sun-ink);
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+}
+
+.sun-disc {
+  fill: color-mix(in oklab, var(--color-weather-sun) 30%, white);
+  stroke: var(--sun-ink);
+  stroke-width: 2.6;
+}
+
+.sun-eye,
+.sun-mouth {
+  fill: none;
+  stroke: var(--sun-ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.sun-cheek {
+  fill: color-mix(in oklab, oklch(0.7 0.17 18) 52%, transparent);
 }
 
 /* 少云时太阳稍收敛，避免喧宾夺主 */
@@ -841,26 +871,15 @@ const scene = computed(() =>
   animation-delay: -3.2s;
 }
 
-/* 太阳核心呼吸，保持居中偏移 */
+/* 太阳轻微呼吸缩放 */
 @keyframes sun-breathe {
   0%,
   100% {
-    transform: translate(-50%, -50%) scale(0.92);
+    transform: scale(0.97);
   }
 
   50% {
-    transform: translate(-50%, -50%) scale(1.06);
-  }
-}
-
-/* 光晕缓慢旋转 */
-@keyframes sun-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
+    transform: scale(1.03);
   }
 }
 
