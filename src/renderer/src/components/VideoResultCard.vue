@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import {
   AlertCircle,
@@ -23,6 +23,7 @@ import type {
   VideoContainer,
   VideoDownloadProgress,
   VideoDownloadSnapshot,
+  VideoImageDownloadSnapshot,
   VideoVariant
 } from '@shared/video'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +51,19 @@ type DownloadingSnapshot = Extract<
 type CompletedSnapshot = Extract<VideoDownloadSnapshot, { status: 'completed' }>
 type FailedSnapshot = Extract<VideoDownloadSnapshot, { status: 'failed' }>
 
+type ImageDownloadingSnapshot = Extract<
+  VideoImageDownloadSnapshot,
+  { status: 'downloading' }
+>
+type ImageCompletedSnapshot = Extract<
+  VideoImageDownloadSnapshot,
+  { status: 'completed' }
+>
+type ImageFailedSnapshot = Extract<
+  VideoImageDownloadSnapshot,
+  { status: 'failed' }
+>
+
 const CONTAINER_LABELS: Record<VideoContainer, string> = {
   mp4: 'MP4',
   flv: 'FLV',
@@ -67,6 +81,11 @@ const {
   cancelDownload,
   openDownloaded,
   showInFolder,
+  imageDownloadSnapshot,
+  startImageDownload,
+  cancelImageDownload,
+  openImageDirectory,
+  subscribeImageDownload,
   setTranscriptTarget,
   setSubModule,
   actionError
@@ -120,6 +139,14 @@ const images = computed(() => resource.value?.images ?? [])
 /** 图文图片加载失败的索引集合，失败时展示占位而非破图 */
 const failedImages = ref<Set<number>>(new Set())
 
+/** 动图缩略图加载失败的索引集合，失败时回退到静态图 */
+const failedAnimated = ref<Set<number>>(new Set())
+
+/** 是否有图片仅剩带水印版本，用于下载完成后的提示 */
+const hasWatermarkedImages = computed<boolean>(() =>
+  images.value.some((item) => item.watermarked)
+)
+
 /** 当前预览的图片索引，null 表示弹窗关闭 */
 const previewIndex = ref<number | null>(null)
 
@@ -150,9 +177,27 @@ function markImageFailed(index: number): void {
   failedImages.value = new Set(failedImages.value).add(index)
 }
 
+/** 动图加载失败时记录索引，缩略图回退为静态图 */
+function markAnimatedFailed(index: number): void {
+  failedAnimated.value = new Set(failedAnimated.value).add(index)
+}
+
 /** 弹窗关闭时清空预览索引 */
 const handlePreviewOpenChange = (open: boolean): void => {
   if (!open) previewIndex.value = null
+}
+
+/** 预览动图地址：动图已在当前资源中加载失败时返回空串以回退静态图 */
+const previewAnimatedUrl = computed<string>(() => {
+  const index = previewIndex.value
+  if (index === null || failedAnimated.value.has(index)) return ''
+  return previewImage.value?.animated?.url ?? ''
+})
+
+/** 预览动图加载失败时记录索引，回退到静态大图 */
+const handlePreviewAnimatedError = (): void => {
+  const index = previewIndex.value
+  if (index !== null) markAnimatedFailed(index)
 }
 
 /** 预览大图加载失败时记录索引，弹窗内展示占位 */
@@ -176,6 +221,43 @@ const failedState = computed<FailedSnapshot | null>(() =>
 )
 
 const downloading = computed<boolean>(() => downloadingState.value !== null)
+
+const imageDownloadingState = computed<ImageDownloadingSnapshot | null>(() =>
+  imageDownloadSnapshot.value.status === 'downloading'
+    ? imageDownloadSnapshot.value
+    : null
+)
+
+const imageCompletedState = computed<ImageCompletedSnapshot | null>(() =>
+  imageDownloadSnapshot.value.status === 'completed'
+    ? imageDownloadSnapshot.value
+    : null
+)
+
+const imageFailedState = computed<ImageFailedSnapshot | null>(() =>
+  imageDownloadSnapshot.value.status === 'failed'
+    ? imageDownloadSnapshot.value
+    : null
+)
+
+/** 正在处理的图片序号：已完成数 + 1，不超过总数 */
+const imageCurrentNumber = computed<number>(() => {
+  const progress = imageDownloadingState.value?.progress
+  if (progress === undefined || progress.total <= 0) return 0
+  return Math.min(progress.completed + 1, progress.total)
+})
+
+/** 图集下载状态推送，组件卸载时取消订阅 */
+let unsubscribeImageDownload: (() => void) | null = null
+
+onMounted(() => {
+  unsubscribeImageDownload = subscribeImageDownload()
+})
+
+onUnmounted(() => {
+  unsubscribeImageDownload?.()
+  unsubscribeImageDownload = null
+})
 
 /** 档位附加信息：容器与分辨率 */
 function variantMeta(variant: VideoVariant): string {
@@ -241,6 +323,7 @@ watch(
   () => {
     coverFailed.value = false
     failedImages.value = new Set()
+    failedAnimated.value = new Set()
     previewIndex.value = null
   }
 )
@@ -520,8 +603,19 @@ watch(
             :aria-label="`查看${resource.title} 图片 ${index + 1}`"
             @click="previewIndex = index"
           >
+            <video
+              v-if="image.animated && !failedAnimated.has(index)"
+              :src="image.animated.url"
+              autoplay
+              loop
+              muted
+              playsinline
+              :aria-label="`${resource.title} 动图 ${index + 1}`"
+              class="h-full w-full object-cover"
+              @error="markAnimatedFailed(index)"
+            />
             <img
-              v-if="!failedImages.has(index)"
+              v-else-if="!failedImages.has(index)"
               :src="image.url"
               :alt="`${resource.title} 图片 ${index + 1}`"
               referrerpolicy="no-referrer"
@@ -538,16 +632,157 @@ watch(
               </span>
               加载失败
             </span>
-            <span
-              class="bg-background/85 text-foreground border-border/60 absolute right-1 bottom-1 rounded-full border px-1.5 py-0.5 text-[10px] leading-none tabular-nums backdrop-blur"
+            <div
+              class="pointer-events-none absolute right-1 bottom-1 flex max-w-full items-center gap-1"
             >
-              {{ index + 1 }}
-            </span>
+              <span
+                v-if="image.animated"
+                class="bg-background/85 text-foreground border-border/60 rounded-full border px-1.5 py-0.5 text-[10px] leading-none backdrop-blur"
+              >
+                动图
+              </span>
+              <span
+                class="bg-background/85 text-foreground border-border/60 rounded-full border px-1.5 py-0.5 text-[10px] leading-none tabular-nums backdrop-blur"
+              >
+                {{ index + 1 }}
+              </span>
+            </div>
           </button>
         </div>
         <p v-else class="text-muted-foreground text-xs">
           该图文笔记没有可展示的图片
         </p>
+
+        <div class="flex flex-col gap-2">
+          <div
+            v-if="imageDownloadingState"
+            class="flex flex-col gap-2"
+            aria-live="polite"
+          >
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 text-xs"
+            >
+              <span class="text-foreground font-medium tabular-nums">
+                正在下载第 {{ imageCurrentNumber }} /
+                {{ imageDownloadingState.progress.total }} 张
+              </span>
+              <span class="text-muted-foreground tabular-nums">
+                {{ imageDownloadingState.progress.percent }}%
+              </span>
+            </div>
+            <Progress
+              :model-value="imageDownloadingState.progress.percent"
+              class="h-2"
+              aria-label="图片下载进度"
+            />
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span
+                v-if="imageDownloadingState.progress.currentFileName"
+                class="text-muted-foreground min-w-0 flex-1 truncate text-[11px]"
+                :title="imageDownloadingState.progress.currentFileName"
+              >
+                {{ imageDownloadingState.progress.currentFileName }}
+              </span>
+              <Button variant="outline" size="sm" @click="cancelImageDownload">
+                <X data-icon="inline-start" />
+                取消
+              </Button>
+            </div>
+          </div>
+
+          <div
+            v-else-if="imageCompletedState"
+            class="bg-muted/20 border-border/60 flex flex-col gap-2 rounded-lg border p-3"
+          >
+            <div class="flex items-start gap-2">
+              <CheckCircle2
+                class="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <p class="text-foreground text-xs font-medium">
+                  <template v-if="imageCompletedState.failed === 0">
+                    已保存 {{ imageCompletedState.saved }} 张图片
+                  </template>
+                  <template v-else>
+                    成功 {{ imageCompletedState.saved }} 张，失败
+                    {{ imageCompletedState.failed }} 张
+                  </template>
+                </p>
+                <p
+                  class="text-muted-foreground truncate text-[11px]"
+                  :title="imageCompletedState.directory"
+                >
+                  {{ imageCompletedState.directory }}
+                </p>
+                <p
+                  v-if="hasWatermarkedImages"
+                  class="text-muted-foreground text-[11px]"
+                >
+                  部分图片仅提供带水印版本
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button size="sm" @click="openImageDirectory">
+                <FolderOpen data-icon="inline-start" />
+                打开文件夹
+              </Button>
+              <Button
+                v-if="imageCompletedState.failed > 0"
+                variant="outline"
+                size="sm"
+                @click="startImageDownload"
+              >
+                <RefreshCw data-icon="inline-start" />
+                重试
+              </Button>
+            </div>
+          </div>
+
+          <div
+            v-else-if="imageFailedState"
+            class="border-destructive/30 bg-destructive/5 flex flex-col gap-2 rounded-lg border p-3"
+            role="alert"
+          >
+            <div class="text-destructive flex items-start gap-2 text-xs">
+              <AlertCircle
+                class="mt-0.5 size-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <p>{{ videoErrorMessage(imageFailedState.reason) }}</p>
+                <p
+                  v-if="imageFailedState.detail"
+                  class="text-muted-foreground text-[11px] break-words"
+                >
+                  {{ imageFailedState.detail }}
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button size="sm" @click="startImageDownload">
+                <RefreshCw data-icon="inline-start" />
+                重试
+              </Button>
+            </div>
+          </div>
+
+          <div v-else class="flex flex-col gap-1.5">
+            <Button
+              class="w-full sm:w-auto"
+              size="sm"
+              :disabled="images.length === 0"
+              @click="startImageDownload"
+            >
+              <Download data-icon="inline-start" />
+              下载全部图片
+            </Button>
+            <p v-if="images.length === 0" class="text-muted-foreground text-xs">
+              该笔记没有可下载的图片
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -567,8 +802,20 @@ watch(
         </div>
 
         <div class="bg-muted flex items-center justify-center">
+          <video
+            v-if="previewAnimatedUrl"
+            :src="previewAnimatedUrl"
+            autoplay
+            loop
+            muted
+            playsinline
+            controls
+            :aria-label="previewAlt"
+            class="bg-muted max-h-[80vh] w-full object-contain"
+            @error="handlePreviewAnimatedError"
+          />
           <img
-            v-if="previewImage && !previewFailed"
+            v-else-if="previewImage && !previewFailed"
             :src="previewImage.url"
             :alt="previewAlt"
             referrerpolicy="no-referrer"

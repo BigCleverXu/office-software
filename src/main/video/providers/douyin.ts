@@ -325,28 +325,212 @@ function buildVariants(video: Record<string, unknown>): VideoVariant[] {
   return [variant]
 }
 
-/** 读取图文图片列表 */
-function buildImages(item: Record<string, unknown>): VideoImage[] {
+/** 读取字符串数组中的全部非空地址，保持原顺序 */
+function stringListOf(value: unknown): string[] {
+  const result: string[] = []
+  for (const item of asArray(value)) {
+    if (typeof item === 'string' && item.trim() !== '') {
+      result.push(item.trim())
+    }
+  }
+  return result
+}
+
+/** 候选来源既可能是字符串数组，也可能是带 url_list 的对象 */
+function urlListOrStrings(value: unknown): string[] {
+  return Array.isArray(value) ? stringListOf(value) : urlListOf(value)
+}
+
+/** 地址中出现该标记说明是平台带水印的版本 */
+const WATERMARK_URL_PATTERN = /playwm|watermark/i
+
+/** 去水印后追加地址：保持顺序并去重 */
+function appendUrls(target: string[], values: string[]): void {
+  for (const value of values) {
+    const url = dewatermark(value)
+    if (url !== '' && !target.includes(url)) {
+      target.push(url)
+    }
+  }
+}
+
+/** 常规图片来源，按无水印优先顺序排列 */
+const IMAGE_URL_KEYS: readonly (readonly string[])[] = [
+  ['download_url_list', 'downloadUrlList'],
+  ['origin_url_list', 'originUrlList', 'origin_image', 'originImage'],
+  ['display_image', 'displayImage'],
+  ['url_list', 'urlList']
+]
+
+/** 明确带作者 / 用户水印的来源，仅在其他来源全空时兜底 */
+const WATERMARK_IMAGE_KEYS: readonly (readonly string[])[] = [
+  ['owner_watermark_image', 'ownerWatermarkImage'],
+  ['user_watermark_image', 'userWatermarkImage']
+]
+
+/** 按来源分组依次收集图片地址 */
+function imageUrlsOfKeys(
+  record: Record<string, unknown>,
+  groups: readonly (readonly string[])[]
+): string[] {
+  const urls: string[] = []
+  for (const group of groups) {
+    for (const key of group) {
+      appendUrls(urls, urlListOrStrings(record[key]))
+    }
+  }
+  return urls
+}
+
+/**
+ * 收集单张图片的候选地址：条目可能是字符串，也可能是新旧两种对象结构。
+ * 优先级：download_url_list → origin 系列 → display_image → 条目自身 url_list；
+ * 以上全空时才回退带作者 / 用户水印的来源，并标记 watermarked。
+ */
+function imageCandidatesOf(entry: unknown): {
+  urls: string[]
+  watermarked: boolean
+} {
+  if (typeof entry === 'string') {
+    const urls: string[] = []
+    appendUrls(urls, [entry])
+    return { urls, watermarked: false }
+  }
+  const record = asRecord(entry)
+  if (record === null) {
+    return { urls: [], watermarked: false }
+  }
+  const urls = imageUrlsOfKeys(record, IMAGE_URL_KEYS)
+  if (urls.length > 0) {
+    return { urls, watermarked: false }
+  }
+  const watermarkUrls = imageUrlsOfKeys(record, WATERMARK_IMAGE_KEYS)
+  return { urls: watermarkUrls, watermarked: watermarkUrls.length > 0 }
+}
+
+/** 读取动图的原始候选地址（未去水印） */
+function animatedRawUrls(
+  record: Record<string, unknown>,
+  video: Record<string, unknown> | null
+): string[] {
+  const urls: string[] = []
+  if (video !== null) {
+    urls.push(...urlListOf(asRecord(video.play_addr ?? video.playAddr)))
+    urls.push(
+      ...urlListOf(asRecord(video.play_addr_h264 ?? video.playAddrH264))
+    )
+  }
+  if (urls.length === 0) {
+    for (const value of [
+      record.video_url,
+      record.videoUrl,
+      record.animated_url,
+      record.animatedUrl
+    ]) {
+      urls.push(...urlListOrStrings(value))
+    }
+  }
+  return urls
+}
+
+/**
+ * 读取条目的动图（live 图）视频源。
+ * 地址按无水印优先排序，只拿到带水印来源时返回 watermarked。
+ */
+function animatedOf(record: Record<string, unknown>): {
+  animated: NonNullable<VideoImage['animated']> | null
+  watermarked: boolean
+} {
+  const video = asRecord(record.video)
+  const raw = animatedRawUrls(record, video)
+  const urls: string[] = []
+  appendUrls(urls, raw)
+  const url = urls[0]
+  if (url === undefined) {
+    return { animated: null, watermarked: false }
+  }
+  const playAddr =
+    video === null ? null : asRecord(video.play_addr ?? video.playAddr)
+  const animated: NonNullable<VideoImage['animated']> = { url }
+  const width =
+    numberOrUndefined(video?.width) ?? numberOrUndefined(playAddr?.width)
+  const height =
+    numberOrUndefined(video?.height) ?? numberOrUndefined(playAddr?.height)
+  if (width !== undefined) {
+    animated.width = width
+  }
+  if (height !== undefined) {
+    animated.height = height
+  }
+  const durationMs = numberOrUndefined(video?.duration)
+  if (durationMs !== undefined) {
+    const durationSec = Math.round(durationMs / 1000)
+    if (durationSec > 0) {
+      animated.durationSec = durationSec
+    }
+  }
+  // 全部分支都是带水印地址时，动图同样需要标记
+  const watermarked = raw.every((value) => WATERMARK_URL_PATTERN.test(value))
+  return { animated, watermarked }
+}
+
+/** 收集图片条目，同一地址只保留首个（同一张图的多个镜像会被去掉） */
+function collectImages(entries: unknown[]): VideoImage[] {
   const images: VideoImage[] = []
-  for (const entry of asArray(item.images)) {
-    const record = asRecord(entry)
-    const url = urlListOf(record).map(dewatermark)[0]
+  const seen = new Set<string>()
+  for (const entry of entries) {
+    const candidates = imageCandidatesOf(entry)
+    const url = candidates.urls[0]
     if (url === undefined) {
       continue
     }
-    const image: VideoImage = { url }
-    const width = record === null ? undefined : numberOrUndefined(record.width)
+    if (seen.has(url)) {
+      continue
+    }
+    seen.add(url)
+    const record = asRecord(entry)
+    const display = asRecord(record?.display_image ?? record?.displayImage)
+    const width =
+      numberOrUndefined(display?.width) ?? numberOrUndefined(record?.width)
     const height =
-      record === null ? undefined : numberOrUndefined(record.height)
+      numberOrUndefined(display?.height) ?? numberOrUndefined(record?.height)
+    const image: VideoImage = { url }
     if (width !== undefined) {
       image.width = width
     }
     if (height !== undefined) {
       image.height = height
     }
+    if (candidates.urls.length > 1) {
+      image.fallbackUrls = candidates.urls.slice(1)
+    }
+    let watermarked = candidates.watermarked
+    if (record !== null) {
+      const animated = animatedOf(record)
+      if (animated.animated !== null) {
+        image.animated = animated.animated
+        watermarked = watermarked || animated.watermarked
+      }
+    }
+    if (watermarked) {
+      image.watermarked = true
+    }
     images.push(image)
   }
   return images
+}
+
+/** 读取图文图片列表：优先 images，为空时回退 image_post_info.images */
+function buildImages(item: Record<string, unknown>): VideoImage[] {
+  const images = collectImages(asArray(item.images))
+  if (images.length > 0) {
+    return images
+  }
+  const post = asRecord(item.image_post_info ?? item.imagePostInfo)
+  if (post === null) {
+    return images
+  }
+  return collectImages(asArray(post.images))
 }
 
 /** 读取互动数据 */
@@ -382,8 +566,10 @@ function buildResource(
   const kind = images.length > 0 ? 'note' : 'video'
   const author = asRecord(item.author)
   const video = asRecord(item.video)
-  const coverUrl =
+  const videoCover =
     video === null ? '' : (urlListOf(asRecord(video.cover))[0] ?? '')
+  // 图集常缺少 video.cover（甚至整段 video 为 null），此时用首图作封面
+  const coverUrl = videoCover !== '' ? videoCover : (images[0]?.url ?? '')
   const coverAbsolute = absoluteUrl('https://www.douyin.com', coverUrl)
   const description = pickFirstString(item.desc)
   const title =

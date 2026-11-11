@@ -94,6 +94,7 @@ import {
   type VideoDownloadSnapshot,
   type VideoEngineProbe,
   type VideoExportResult,
+  type VideoImageDownloadSnapshot,
   type VideoModuleSettings,
   type VideoParseResult,
   type VideoPickKind,
@@ -486,6 +487,33 @@ const video: VideoApi = {
       ipcRenderer.removeListener(VIDEO_CHANNELS.onDownloadProgress, listener)
     }
   },
+  downloadImages: (input: {
+    resourceId: string
+  }): Promise<VideoImageDownloadSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.downloadImages, input),
+  getImageDownloadState: (): Promise<VideoImageDownloadSnapshot> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.imageDownloadState),
+  cancelImageDownload: (): Promise<void> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.cancelImageDownload),
+  onImageDownloadProgress: (
+    callback: (snapshot: VideoImageDownloadSnapshot) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: VideoImageDownloadSnapshot
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(VIDEO_CHANNELS.onImageDownloadProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(
+        VIDEO_CHANNELS.onImageDownloadProgress,
+        listener
+      )
+    }
+  },
+  openDirectory: (path: string): Promise<void> =>
+    ipcRenderer.invoke(VIDEO_CHANNELS.openDirectory, path),
   startTranscript: (
     request: VideoTranscriptRequest
   ): Promise<VideoTranscriptSnapshot> =>

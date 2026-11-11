@@ -61,6 +61,7 @@ import { VIDEO_CHANNELS } from '../shared/video'
 import { VideoEngineSettingsStore } from './video/engine-settings'
 import { VideoParseService } from './video/parse-service'
 import { VideoDownloader } from './video/downloader'
+import { VideoImageDownloader } from './video/image-downloader'
 import { VideoTranscriptService } from './video/transcript-service'
 import { resolveFfmpegPath } from './video/engine-detect'
 import {
@@ -105,6 +106,7 @@ let pendingUpdate: UpdateCheckResult | null = null
 /** 短视频模块：引擎设置存储、下载器与口播服务（退出时需取消任务） */
 let videoEngineStore: VideoEngineSettingsStore | null = null
 let videoDownloader: VideoDownloader | null = null
+let videoImageDownloader: VideoImageDownloader | null = null
 let videoTranscriptService: VideoTranscriptService | null = null
 
 /** Windows 原生窗口控件覆盖层高度，与渲染层顶部栏（56px）对齐 */
@@ -494,6 +496,16 @@ app.whenReady().then(() => {
     }
   })
   videoDownloader = downloader
+  const imageDownloader = new VideoImageDownloader({
+    onSnapshot: (snapshot) => {
+      // 图集下载的快照整体推送，渲染层可直接展示进度与结果
+      mainWindow?.webContents.send(
+        VIDEO_CHANNELS.onImageDownloadProgress,
+        snapshot
+      )
+    }
+  })
+  videoImageDownloader = imageDownloader
   const transcriptService = new VideoTranscriptService({
     store: engineStore,
     getDownloadDir: () => resolveVideoDownloadDir(),
@@ -505,6 +517,7 @@ app.whenReady().then(() => {
   registerVideoIpc({
     parseService: videoParseService,
     downloader,
+    imageDownloader,
     transcriptService,
     engineStore,
     getDownloadDir: () => resolveVideoDownloadDir(),
@@ -573,6 +586,7 @@ app.on('before-quit', () => {
   updateChecker?.stop()
   updateChecker = null
   videoDownloader?.cancel()
+  videoImageDownloader?.cancel()
   videoTranscriptService?.cancel()
   if (trayTooltipTimer !== null) {
     clearInterval(trayTooltipTimer)

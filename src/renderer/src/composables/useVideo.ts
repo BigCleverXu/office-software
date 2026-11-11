@@ -9,6 +9,8 @@ import type {
   VideoDownloadProgress,
   VideoDownloadSnapshot,
   VideoEngineProbe,
+  VideoImageDownloadProgress,
+  VideoImageDownloadSnapshot,
   VideoModuleSettings,
   VideoPickKind,
   VideoResource,
@@ -84,6 +86,14 @@ function snapshotBelongsTo(
   return snapshot.title === resource.title
 }
 
+/** 图集快照同样按标题归属到当前资源，避免带出上一个资源的下载结果 */
+function imageSnapshotBelongsTo(
+  snapshot: VideoImageDownloadSnapshot,
+  target: VideoResource
+): boolean {
+  return snapshot.status !== 'idle' && snapshot.title === target.title
+}
+
 // 模块级共享状态：面板与子组件共享同一份解析 / 下载 / 口播 / 引擎状态
 const input = ref('')
 const parsing = ref(false)
@@ -91,6 +101,9 @@ const resource = ref<VideoResource | null>(null)
 const parseError = ref<string | null>(null)
 const selectedVariantId = ref('')
 const downloadSnapshot = ref<VideoDownloadSnapshot>({ status: 'idle' })
+const imageDownloadSnapshot = ref<VideoImageDownloadSnapshot>({
+  status: 'idle'
+})
 const transcriptSnapshot = ref<VideoTranscriptSnapshot>({ status: 'idle' })
 const transcriptText = ref('')
 const engineSettings = ref<VideoModuleSettings>(defaultSettings())
@@ -106,8 +119,9 @@ const subModule = ref<VideoSubModuleId>('parse')
 /** 解析请求序号，丢弃过期响应 */
 let parseToken = 0
 
-/** 下载 / 口播请求序号，切换资源后丢弃旧任务的结果与推送 */
+/** 下载 / 图集 / 口播请求序号，切换资源后丢弃旧任务的结果与推送 */
 let downloadToken = 0
+let imageDownloadToken = 0
 let transcriptToken = 0
 
 /** 当前口播任务对应的视频文件名，用于过滤其他文件的状态推送 */
@@ -136,6 +150,25 @@ const downloadCompleted = computed<boolean>(
   () => downloadSnapshot.value.status === 'completed'
 )
 
+const imageDownloading = computed<boolean>(
+  () => imageDownloadSnapshot.value.status === 'downloading'
+)
+
+const imageDownloadCompleted = computed<boolean>(
+  () => imageDownloadSnapshot.value.status === 'completed'
+)
+
+const imageDownloadFailed = computed<boolean>(
+  () => imageDownloadSnapshot.value.status === 'failed'
+)
+
+const imageDownloadProgress = computed<VideoImageDownloadProgress | null>(
+  () => {
+    const current = imageDownloadSnapshot.value
+    return current.status === 'downloading' ? current.progress : null
+  }
+)
+
 const transcriptBusy = computed<boolean>(
   () => transcriptSnapshot.value.status === 'running'
 )
@@ -143,11 +176,13 @@ const transcriptBusy = computed<boolean>(
 /** 清空解析之外的资源状态，开始新一轮解析时调用 */
 function resetResourceState(): void {
   downloadToken += 1
+  imageDownloadToken += 1
   transcriptToken += 1
   activeTranscriptFileName = null
   resource.value = null
   selectedVariantId.value = ''
   downloadSnapshot.value = { status: 'idle' }
+  imageDownloadSnapshot.value = { status: 'idle' }
   transcriptSnapshot.value = { status: 'idle' }
   transcriptText.value = ''
   transcriptDirty = false
@@ -178,6 +213,9 @@ async function restoreSnapshots(
   if (download !== null && snapshotBelongsTo(download, target)) {
     downloadSnapshot.value = download
   }
+
+  await restoreImageDownloadState()
+  if (token !== parseToken) return
 
   let transcript: VideoTranscriptSnapshot | null = null
   try {
@@ -230,6 +268,9 @@ const parse = async (text?: string): Promise<void> => {
   if (downloadSnapshot.value.status === 'downloading') {
     void window.api.video.cancelDownload().catch(() => undefined)
   }
+  if (imageDownloadSnapshot.value.status === 'downloading') {
+    void window.api.video.cancelImageDownload().catch(() => undefined)
+  }
   if (transcriptSnapshot.value.status === 'running') {
     void window.api.video.cancelTranscript().catch(() => undefined)
   }
@@ -268,6 +309,9 @@ const clearInput = (): void => {
   parseError.value = null
   if (downloadSnapshot.value.status === 'downloading') {
     void window.api.video.cancelDownload().catch(() => undefined)
+  }
+  if (imageDownloadSnapshot.value.status === 'downloading') {
+    void window.api.video.cancelImageDownload().catch(() => undefined)
   }
   if (transcriptSnapshot.value.status === 'running') {
     void window.api.video.cancelTranscript().catch(() => undefined)
@@ -433,6 +477,96 @@ const showInFolder = async (): Promise<void> => {
     await window.api.video.showInFolder(current.filePath)
   } catch {
     actionError.value = '无法在文件夹中显示该文件'
+  }
+}
+
+/** 读取主进程图集快照，恢复页面打开或重新解析后的下载状态 */
+const restoreImageDownloadState = async (): Promise<void> => {
+  const target = resource.value
+  if (target === null) return
+  const token = imageDownloadToken
+  let snapshot: VideoImageDownloadSnapshot | null = null
+  try {
+    snapshot = await window.api.video.getImageDownloadState()
+  } catch {
+    snapshot = null
+  }
+  if (token !== imageDownloadToken) return
+  if (snapshot === null || !imageSnapshotBelongsTo(snapshot, target)) return
+  imageDownloadSnapshot.value = snapshot
+}
+
+/** 下载图文笔记的全部图片 */
+const startImageDownload = async (): Promise<void> => {
+  const current = resource.value
+  if (current === null) {
+    imageDownloadSnapshot.value = {
+      status: 'failed',
+      title: '',
+      reason: 'empty',
+      detail: '请先解析图文资源'
+    }
+    return
+  }
+  if (imageDownloadSnapshot.value.status === 'downloading') return
+
+  imageDownloadToken += 1
+  const token = imageDownloadToken
+  actionError.value = null
+  // 先写乐观快照，进度推送才能落在下载中状态上
+  imageDownloadSnapshot.value = {
+    status: 'downloading',
+    title: current.title,
+    directory: '',
+    progress: {
+      completed: 0,
+      total: current.images.length,
+      currentFileName: '',
+      percent: 0
+    }
+  }
+
+  try {
+    const snapshot = await window.api.video.downloadImages({
+      resourceId: current.id
+    })
+    if (token !== imageDownloadToken || resource.value?.id !== current.id) {
+      return
+    }
+    imageDownloadSnapshot.value = snapshot
+  } catch (error) {
+    if (token !== imageDownloadToken || resource.value?.id !== current.id) {
+      return
+    }
+    imageDownloadSnapshot.value = {
+      status: 'failed',
+      title: current.title,
+      reason: 'unknown',
+      detail: detailFromError(error)
+    }
+  }
+}
+
+/** 取消图集下载，保留已写入的图片，最终状态由任务返回值收敛 */
+const cancelImageDownload = async (): Promise<void> => {
+  if (imageDownloadSnapshot.value.status !== 'downloading') return
+  try {
+    await window.api.video.cancelImageDownload()
+  } catch {
+    // 取消失败由下载 Promise 的最终快照收敛
+  }
+  await restoreImageDownloadState()
+}
+
+/** 打开图集所在目录 */
+const openImageDirectory = async (): Promise<void> => {
+  const current = imageDownloadSnapshot.value
+  if (current.status !== 'completed') return
+  actionError.value = null
+  try {
+    await window.api.video.openDirectory(current.directory)
+  } catch {
+    actionError.value = '打开文件夹失败'
   }
 }
 
@@ -688,6 +822,20 @@ const subscribeDownload = (): (() => void) => {
   }
 }
 
+/** 订阅图集下载推送：只接收归属当前资源的快照 */
+const subscribeImageDownload = (): (() => void) => {
+  try {
+    return window.api.video.onImageDownloadProgress((snapshot) => {
+      const current = resource.value
+      if (current === null || snapshot.status === 'idle') return
+      if (snapshot.title !== current.title) return
+      imageDownloadSnapshot.value = snapshot
+    })
+  } catch {
+    return () => undefined
+  }
+}
+
 /** 订阅口播状态推送，返回取消订阅函数 */
 const subscribeTranscript = (): (() => void) => {
   try {
@@ -725,6 +873,16 @@ interface UseVideo {
   downloadProgress: ComputedRef<VideoDownloadProgress | null>
   /** 是否已下载完成 */
   downloadCompleted: ComputedRef<boolean>
+  /** 图集下载状态快照 */
+  imageDownloadSnapshot: Ref<VideoImageDownloadSnapshot>
+  /** 图集下载中实时进度，非下载中为 null */
+  imageDownloadProgress: ComputedRef<VideoImageDownloadProgress | null>
+  /** 图集是否正在下载 */
+  imageDownloading: ComputedRef<boolean>
+  /** 图集是否下载完成 */
+  imageDownloadCompleted: ComputedRef<boolean>
+  /** 图集是否下载失败 */
+  imageDownloadFailed: ComputedRef<boolean>
   /** 口播状态快照 */
   transcriptSnapshot: Ref<VideoTranscriptSnapshot>
   /** 口播文本，双向可编辑 */
@@ -757,6 +915,10 @@ interface UseVideo {
   resetDownload: () => Promise<void>
   openDownloaded: () => Promise<void>
   showInFolder: () => Promise<void>
+  startImageDownload: () => Promise<void>
+  cancelImageDownload: () => Promise<void>
+  openImageDirectory: () => Promise<void>
+  restoreImageDownloadState: () => Promise<void>
   transcriptStart: (path?: string) => Promise<void>
   transcriptCancel: () => Promise<void>
   updateTranscriptText: (value: string) => void
@@ -773,6 +935,7 @@ interface UseVideo {
   ) => Promise<boolean>
   pickEnginePath: (kind: VideoPickKind) => Promise<string | null>
   subscribeDownload: () => () => void
+  subscribeImageDownload: () => () => void
   subscribeTranscript: () => () => void
 }
 
@@ -788,6 +951,11 @@ export function useVideo(): UseVideo {
     downloadSnapshot,
     downloadProgress,
     downloadCompleted,
+    imageDownloadSnapshot,
+    imageDownloadProgress,
+    imageDownloading,
+    imageDownloadCompleted,
+    imageDownloadFailed,
     transcriptSnapshot,
     transcriptText,
     transcriptBusy,
@@ -808,6 +976,10 @@ export function useVideo(): UseVideo {
     resetDownload,
     openDownloaded,
     showInFolder,
+    startImageDownload,
+    cancelImageDownload,
+    openImageDirectory,
+    restoreImageDownloadState,
     transcriptStart,
     transcriptCancel,
     updateTranscriptText,
@@ -822,6 +994,7 @@ export function useVideo(): UseVideo {
     updateEngineSettings,
     pickEnginePath,
     subscribeDownload,
+    subscribeImageDownload,
     subscribeTranscript
   }
 }

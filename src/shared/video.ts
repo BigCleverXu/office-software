@@ -43,6 +43,17 @@ export interface VideoImage {
   url: string
   width?: number
   height?: number
+  /** 同图的无水印优先候选地址，下载失败时依次回退 */
+  fallbackUrls?: string[]
+  /** 仅剩带水印候选时为 true */
+  watermarked?: boolean
+  /** 动图（live 图）的视频源 */
+  animated?: {
+    url: string
+    width?: number
+    height?: number
+    durationSec?: number
+  }
 }
 
 /** 资源互动数据，缺失的字段不展示 */
@@ -159,6 +170,43 @@ export type VideoDownloadSnapshot =
       resumable: boolean
     }
 
+/** 图集下载进度 */
+export interface VideoImageDownloadProgress {
+  /** 已完成（成功 + 失败）的图片数 */
+  completed: number
+  /** 图片总数 */
+  total: number
+  /** 当前处理的文件名 */
+  currentFileName: string
+  /** 进度百分比（0-100 整数） */
+  percent: number
+}
+
+/** 图集下载状态快照：同一时刻只允许一个任务 */
+export type VideoImageDownloadSnapshot =
+  | { status: 'idle' }
+  | {
+      status: 'downloading'
+      title: string
+      directory: string
+      progress: VideoImageDownloadProgress
+    }
+  | {
+      status: 'completed'
+      title: string
+      directory: string
+      /** 成功保存的图片数 */
+      saved: number
+      /** 下载失败的图片数 */
+      failed: number
+    }
+  | {
+      status: 'failed'
+      title: string
+      reason: VideoErrorReason
+      detail?: string
+    }
+
 /** 口播提取阶段 */
 export type VideoTranscriptStage =
   'idle' | 'extracting' | 'recognizing' | 'completed' | 'failed'
@@ -262,6 +310,16 @@ export const VIDEO_CHANNELS = {
   downloadState: 'video:download-state',
   /** 主进程推送下载进度 */
   onDownloadProgress: 'video:download-progress',
+  /** 下载图文笔记的全部图片 */
+  downloadImages: 'video:download-images',
+  /** 查询图集下载状态快照 */
+  imageDownloadState: 'video:image-download-state',
+  /** 取消当前图集下载 */
+  cancelImageDownload: 'video:cancel-image-download',
+  /** 主进程推送图集下载状态 */
+  onImageDownloadProgress: 'video:image-download-progress',
+  /** 用系统文件管理器打开目录 */
+  openDirectory: 'video:open-directory',
   /** 开始口播提取 */
   transcriptStart: 'video:transcript-start',
   /** 取消口播提取 */
@@ -325,6 +383,23 @@ export interface VideoApi {
   onDownloadProgress: (
     callback: (progress: VideoDownloadProgress) => void
   ) => () => void
+  /** 下载图文笔记的全部图片到本地目录 */
+  downloadImages: (input: {
+    resourceId: string
+  }) => Promise<VideoImageDownloadSnapshot>
+  /** 查询图集下载快照，用于界面重开恢复 */
+  getImageDownloadState: () => Promise<VideoImageDownloadSnapshot>
+  /** 取消当前图集下载，保留已写入的图片 */
+  cancelImageDownload: () => Promise<void>
+  /**
+   * 订阅图集下载状态。
+   * 返回值为取消订阅函数，组件卸载时调用以避免监听泄漏。
+   */
+  onImageDownloadProgress: (
+    callback: (snapshot: VideoImageDownloadSnapshot) => void
+  ) => () => void
+  /** 用系统文件管理器打开目录 */
+  openDirectory: (path: string) => Promise<void>
   startTranscript: (
     request: VideoTranscriptRequest
   ) => Promise<VideoTranscriptSnapshot>

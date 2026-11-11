@@ -15,6 +15,7 @@ import {
   type VideoEngineProbe,
   type VideoErrorReason,
   type VideoExportResult,
+  type VideoImageDownloadSnapshot,
   type VideoModuleSettings,
   type VideoParseResult,
   type VideoPickKind,
@@ -24,6 +25,7 @@ import {
 import { probeVideoEngine } from './engine-detect'
 import type { VideoEngineSettingsStore } from './engine-settings'
 import type { VideoDownloader } from './downloader'
+import type { VideoImageDownloader } from './image-downloader'
 import type { VideoParseService } from './parse-service'
 import type { VideoTranscriptService } from './transcript-service'
 
@@ -54,6 +56,7 @@ const PICK_KINDS: readonly VideoPickKind[] = [
 export interface VideoIpcDeps {
   parseService: VideoParseService
   downloader: VideoDownloader
+  imageDownloader: VideoImageDownloader
   transcriptService: VideoTranscriptService
   engineStore: VideoEngineSettingsStore
   /** 下载目录；配置为空时的兜底由主进程装配层提供 */
@@ -112,6 +115,25 @@ function failedSnapshot(
     snapshot.title = title
   }
   return snapshot
+}
+
+/** 构造图集下载失败快照，标题未知时用空字符串 */
+function failedImageSnapshot(
+  reason: VideoErrorReason,
+  detail: string,
+  title = ''
+): VideoImageDownloadSnapshot {
+  return { status: 'failed', title, reason, detail }
+}
+
+/** 校验图集下载请求：resourceId 必须是非空字符串 */
+function parseImageDownloadRequest(raw: unknown): string | null {
+  if (!isRecord(raw)) {
+    return null
+  }
+  const resourceId =
+    typeof raw.resourceId === 'string' ? raw.resourceId.trim() : ''
+  return resourceId === '' ? null : resourceId
 }
 
 /** 配置里的下载目录为空时，用主进程兜底目录补全 */
@@ -244,6 +266,56 @@ export function registerVideoIpc(deps: VideoIpcDeps): void {
     } catch (error) {
       console.error('读取下载快照失败:', error)
       return { status: 'idle' }
+    }
+  })
+
+  ipcMain.handle(
+    VIDEO_CHANNELS.downloadImages,
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      rawRequest: unknown
+    ): Promise<VideoImageDownloadSnapshot> => {
+      try {
+        const resourceId = parseImageDownloadRequest(rawRequest)
+        if (resourceId === null) {
+          return failedImageSnapshot('unknown', '下载请求无效')
+        }
+        const resource = deps.parseService.getResource(resourceId)
+        if (resource === null) {
+          return failedImageSnapshot('expired', '解析结果已过期，请重新解析')
+        }
+        const downloadDir = deps.getDownloadDir()
+        try {
+          await mkdir(downloadDir, { recursive: true })
+        } catch (error) {
+          console.error('创建图集下载目录失败:', error)
+          return failedImageSnapshot('write', '下载目录不可写', resource.title)
+        }
+        return await deps.imageDownloader.download({ resource, downloadDir })
+      } catch (error) {
+        console.error('发起图集下载失败:', error)
+        return failedImageSnapshot('unknown', '下载失败，请稍后重试')
+      }
+    }
+  )
+
+  ipcMain.handle(
+    VIDEO_CHANNELS.imageDownloadState,
+    (): VideoImageDownloadSnapshot => {
+      try {
+        return deps.imageDownloader.getSnapshot()
+      } catch (error) {
+        console.error('读取图集下载快照失败:', error)
+        return { status: 'idle' }
+      }
+    }
+  )
+
+  ipcMain.handle(VIDEO_CHANNELS.cancelImageDownload, (): void => {
+    try {
+      deps.imageDownloader.cancel()
+    } catch (error) {
+      console.error('取消图集下载失败:', error)
     }
   })
 
@@ -410,6 +482,24 @@ export function registerVideoIpc(deps: VideoIpcDeps): void {
         }
       } catch (error) {
         console.error('定位文件失败:', error)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    VIDEO_CHANNELS.openDirectory,
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      rawPath: unknown
+    ): Promise<void> => {
+      try {
+        const dirPath = typeof rawPath === 'string' ? rawPath.trim() : ''
+        if (dirPath === '' || !isAbsolute(dirPath) || !existsSync(dirPath)) {
+          return
+        }
+        await shell.openPath(dirPath)
+      } catch (error) {
+        console.error('打开目录失败:', error)
       }
     }
   )

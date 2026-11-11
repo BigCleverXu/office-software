@@ -384,6 +384,305 @@ describe('抖音适配器', () => {
     )
   })
 
+  /** 以单条作品数据构造分享页路由 */
+  function itemShareRoute(item: Record<string, unknown>): Route {
+    const data = {
+      loaderData: {
+        'note_(id)/page': { videoInfoRes: { item_list: [item] } }
+      }
+    }
+    return {
+      match: (url) =>
+        url.hostname === 'www.iesdouyin.com' &&
+        url.pathname.startsWith('/share/'),
+      body: `<script>window._ROUTER_DATA = ${JSON.stringify(data)}</script>`,
+      headers: { 'content-type': 'text/html' }
+    }
+  }
+
+  it('解析 image_post_info 图集的全部图片', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7360323126909095219',
+      desc: '新结构图集',
+      author: { nickname: '图集作者' },
+      image_post_info: {
+        images: [
+          {
+            display_image: {
+              url_list: [
+                'https://p3-pc-sign.douyinpic.com/post1.jpg',
+                'https://p3-pc-sign.douyinpic.com/post1-mirror.jpg'
+              ],
+              width: 1080,
+              height: 1440
+            }
+          },
+          {
+            display_image: {
+              url_list: ['https://p3-pc-sign.douyinpic.com/post2.jpg'],
+              width: 720,
+              height: 960
+            }
+          },
+          {
+            display_image: {
+              url_list: ['https://p3-pc-sign.douyinpic.com/post3.jpg']
+            }
+          }
+        ]
+      }
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7360323126909095219'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.kind).toBe('note')
+    expect(resource.title).toBe('新结构图集')
+    expect(resource.images.map((image) => image.url)).toEqual([
+      'https://p3-pc-sign.douyinpic.com/post1.jpg',
+      'https://p3-pc-sign.douyinpic.com/post2.jpg',
+      'https://p3-pc-sign.douyinpic.com/post3.jpg'
+    ])
+    expect(resource.images[0]?.width).toBe(1080)
+    expect(resource.images[1]?.height).toBe(960)
+    expect(resource.variants).toEqual([])
+  })
+
+  it('images 条目为字符串时也能解析并去重', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7345678901234567900',
+      desc: '字符串图片',
+      images: [
+        'https://p3-pc-sign.douyinpic.com/text1.jpg',
+        'https://p3-pc-sign.douyinpic.com/text1.jpg',
+        'https://p3-pc-sign.douyinpic.com/text2.jpg'
+      ]
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7345678901234567900'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.kind).toBe('note')
+    expect(resource.images.map((image) => image.url)).toEqual([
+      'https://p3-pc-sign.douyinpic.com/text1.jpg',
+      'https://p3-pc-sign.douyinpic.com/text2.jpg'
+    ])
+  })
+
+  it('解析 live 动图的视频源并换算时长', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7360323126909095220',
+      desc: '动图图集',
+      author: { nickname: '动图作者' },
+      images: [
+        {
+          url_list: ['https://p3-pc-sign.douyinpic.com/live1.jpg'],
+          width: 1080,
+          height: 1440,
+          video: {
+            width: 1080,
+            height: 1440,
+            duration: 3200,
+            play_addr: {
+              url_list: ['https://v3-web.douyinvod.com/playwm/live1.mp4'],
+              width: 720,
+              height: 960
+            }
+          }
+        }
+      ]
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7360323126909095220'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.kind).toBe('note')
+    expect(resource.images).toHaveLength(1)
+    expect(resource.images[0]?.url).toBe(
+      'https://p3-pc-sign.douyinpic.com/live1.jpg'
+    )
+    expect(resource.images[0]?.animated?.url).toBe(
+      'https://v3-web.douyinvod.com/play/live1.mp4'
+    )
+    expect(resource.images[0]?.animated?.width).toBe(1080)
+    expect(resource.images[0]?.animated?.height).toBe(1440)
+    expect(resource.images[0]?.animated?.durationSec).toBe(3)
+  })
+
+  it('仅有 owner_watermark_image 时回退并标记水印', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7360323126909095221',
+      desc: '水印图集',
+      images: [
+        {
+          owner_watermark_image: {
+            url_list: ['https://p3-pc-sign.douyinpic.com/watermark1.jpg']
+          }
+        }
+      ]
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7360323126909095221'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.images).toHaveLength(1)
+    expect(resource.images[0]?.url).toBe(
+      'https://p3-pc-sign.douyinpic.com/watermark1.jpg'
+    )
+    expect(resource.images[0]?.watermarked).toBe(true)
+    expect(resource.images[0]?.fallbackUrls).toBeUndefined()
+  })
+
+  it('download_url_list 优先，其余候选写入回退地址', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7360323126909095222',
+      desc: '多来源图片',
+      images: [
+        {
+          download_url_list: ['https://p3-pc-sign.douyinpic.com/dl1.jpg'],
+          url_list: [
+            'https://p3-pc-sign.douyinpic.com/origin1.jpg',
+            'https://p3-pc-sign.douyinpic.com/origin1-mirror.jpg'
+          ]
+        }
+      ]
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7360323126909095222'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.images).toHaveLength(1)
+    expect(resource.images[0]?.url).toBe(
+      'https://p3-pc-sign.douyinpic.com/dl1.jpg'
+    )
+    expect(resource.images[0]?.fallbackUrls).toEqual([
+      'https://p3-pc-sign.douyinpic.com/origin1.jpg',
+      'https://p3-pc-sign.douyinpic.com/origin1-mirror.jpg'
+    ])
+    expect(resource.images[0]?.watermarked).toBeUndefined()
+  })
+
+  it('纯静态图集不带动图与回退地址', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7360323126909095223',
+      desc: '静态图集',
+      images: [
+        {
+          display_image: {
+            url_list: ['https://p3-pc-sign.douyinpic.com/static1.jpg'],
+            width: 720,
+            height: 960
+          }
+        },
+        {
+          display_image: {
+            url_list: ['https://p3-pc-sign.douyinpic.com/static2.jpg']
+          }
+        }
+      ]
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7360323126909095223'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.images).toHaveLength(2)
+    expect(resource.images[0]?.animated).toBeUndefined()
+    expect(resource.images[1]?.animated).toBeUndefined()
+    expect(resource.images[0]?.fallbackUrls).toBeUndefined()
+    expect(resource.images[1]?.fallbackUrls).toBeUndefined()
+    expect(resource.images[0]?.watermarked).toBeUndefined()
+  })
+
+  it('图集缺少 video.cover 时以首图作为封面', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7345678901234567901',
+      desc: '封面回退',
+      video: { duration: 9000 },
+      image_post_info: {
+        images: [
+          {
+            display_image: {
+              url_list: ['https://p3-pc-sign.douyinpic.com/cover1.jpg']
+            }
+          },
+          {
+            display_image: {
+              url_list: ['https://p3-pc-sign.douyinpic.com/cover2.jpg']
+            }
+          }
+        ]
+      }
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7345678901234567901'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.kind).toBe('note')
+    expect(resource.cover?.url).toBe(
+      'https://p3-pc-sign.douyinpic.com/cover1.jpg'
+    )
+    expect(resource.durationSec).toBe(9)
+  })
+
+  it('同时存在 images 与 video 时判为图文且无清晰度档位', async () => {
+    const route = itemShareRoute({
+      aweme_id: '7345678901234567902',
+      desc: '图集带背景音乐',
+      images: [{ url_list: ['https://p3-pc-sign.douyinpic.com/mix1.jpg'] }],
+      video: {
+        play_addr: {
+          url_list: ['https://v3-web.douyinvod.com/play/music.mp4']
+        },
+        cover: {
+          url_list: ['https://p3-pc-sign.douyinpic.com/mix-cover.jpg']
+        },
+        duration: 15000
+      }
+    })
+    const client = createClient(makeFetch([route]))
+    const resource = resourceOf(
+      await douyinProvider.parse(
+        inputOf('https://www.douyin.com/note/7345678901234567902'),
+        contextOf(client)
+      )
+    )
+
+    expect(resource.kind).toBe('note')
+    expect(resource.variants).toEqual([])
+    expect(resource.images).toHaveLength(1)
+    expect(resource.cover?.url).toBe(
+      'https://p3-pc-sign.douyinpic.com/mix-cover.jpg'
+    )
+  })
+
   it('分享页缺失时回退旧版 iteminfo 接口', async () => {
     const client = createClient(
       makeFetch([shareRoute('empty'), itemInfoRoute('douyin-iteminfo.json')])
