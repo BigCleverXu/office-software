@@ -4,6 +4,7 @@ export { registerNewsIpc, type NewsIpcDeps } from './news'
 export { registerWeatherIpc, type WeatherIpcDeps } from './weather'
 export { registerCalendarIpc, type CalendarIpcDeps } from './calendar'
 export { registerMarketIpc, type MarketIpcDeps } from './market'
+export { registerGoldIpc, type GoldIpcDeps } from './gold'
 export {
   registerUpdateIpc,
   openDownloadedFile,

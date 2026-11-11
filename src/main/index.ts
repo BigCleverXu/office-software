@@ -16,11 +16,15 @@ import {
   formatPrice,
   type Quote
 } from '../shared/market'
+import { GOLD_CHANNELS } from '../shared/gold'
 import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
 import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
+import { GoldStore } from './gold-store'
+import { GoldScheduler } from './gold-scheduler'
+import { fetchGoldQuotes } from './gold-provider'
 import { NoteStore } from './note-store'
 import { QuickSiteStore } from './quick-site-store'
 import { QuickSiteGroupStore } from './quick-site-group-store'
@@ -37,6 +41,7 @@ import {
   registerCalendarIpc,
   registerFileSearchIpc,
   registerMarketIpc,
+  registerGoldIpc,
   registerNewsIpc,
   registerNotesIpc,
   registerQuickSiteGroupIpc,
@@ -92,6 +97,8 @@ let tray: Tray | null = null
 let scheduler: AlarmScheduler | null = null
 let marketSchedulerRef: MarketScheduler | null = null
 let usMarketSchedulerRef: UsMarketScheduler | null = null
+/** 积存金调度器，退出时需停止定时刷新 */
+let goldSchedulerRef: GoldScheduler | null = null
 let trayTooltipTimer: ReturnType<typeof setInterval> | null = null
 /** 缓存最后一次有效的上证指数，供非交易时段复用 */
 let lastShanghai: Quote | null = null
@@ -466,6 +473,22 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
+  // 积存金：持仓存库，金价按 10 秒节奏刷新并推送到主窗口
+  const goldStore = new GoldStore(db)
+  const goldScheduler = new GoldScheduler({
+    fetchQuotes: () => fetchGoldQuotes(),
+    getHolding: () => goldStore.getHolding(),
+    onSnapshot: (snapshot) => {
+      mainWindow?.webContents.send(GOLD_CHANNELS.stateChanged, { snapshot })
+    }
+  })
+  goldSchedulerRef = goldScheduler
+  registerGoldIpc({
+    store: goldStore,
+    scheduler: goldScheduler,
+    getWindow: () => mainWindow
+  })
+
   registerUpdateIpc({
     getVersion: () => app.getVersion(),
     getWindow: () => mainWindow,
@@ -570,6 +593,7 @@ app.whenReady().then(() => {
   alarmScheduler.start()
   marketScheduler.start()
   usMarketScheduler.start()
+  goldScheduler.start()
   refreshTrayTooltip()
   trayTooltipTimer = setInterval(refreshTrayTooltip, 10000)
 
@@ -583,6 +607,7 @@ app.on('before-quit', () => {
   scheduler?.stop()
   marketSchedulerRef?.stop()
   usMarketSchedulerRef?.stop()
+  goldSchedulerRef?.stop()
   updateChecker?.stop()
   updateChecker = null
   videoDownloader?.cancel()

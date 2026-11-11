@@ -98,12 +98,13 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后全部表存在且版本号为 9', () => {
+  it(':memory: 打开后全部表存在且版本号为 10', () => {
     const db = openTestDatabase({ path: ':memory:' })
     expect(tableNames(db)).toEqual([
       'alarms',
       'countdowns',
       'file_index',
+      'gold_holding',
       'holiday_cache',
       'notes',
       'quick_site_groups',
@@ -111,8 +112,8 @@ describe('openDatabase 建库', () => {
       'settings',
       'watchlist'
     ])
-    expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(9)
+    expect(userVersion(db)).toBe(10)
+    expect(SCHEMA_VERSION).toBe(10)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
@@ -122,6 +123,7 @@ describe('openDatabase 建库', () => {
       'alarms',
       'countdowns',
       'file_index',
+      'gold_holding',
       'holiday_cache',
       'notes',
       'quick_site_groups',
@@ -202,6 +204,7 @@ CREATE TABLE settings (
       'alarms',
       'countdowns',
       'file_index',
+      'gold_holding',
       'holiday_cache',
       'notes',
       'quick_site_groups',
@@ -209,7 +212,7 @@ CREATE TABLE settings (
       'settings',
       'watchlist'
     ])
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'watchlist')).toBe(1)
   })
@@ -274,11 +277,12 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(tableNames(db)).toEqual([
       'alarms',
       'countdowns',
       'file_index',
+      'gold_holding',
       'holiday_cache',
       'notes',
       'quick_site_groups',
@@ -374,7 +378,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(tableNames(db)).toContain('file_index')
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'alarms')).toBe(1)
@@ -415,7 +419,7 @@ CREATE TABLE notes (
       name: string
     }[]
     expect(columns.map((column) => column.name)).toContain('category')
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(tableNames(db)).toContain('quick_sites')
 
     const note = db
@@ -455,7 +459,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'quick_sites')).toBe(0)
     expect(countRows(db, 'notes')).toBe(1)
@@ -514,7 +518,7 @@ CREATE TABLE quick_sites (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     expect(tableNames(db)).toContain('quick_site_groups')
     expect(countRows(db, 'quick_site_groups')).toBe(0)
     expect(countRows(db, 'quick_sites')).toBe(1)
@@ -522,7 +526,7 @@ CREATE TABLE quick_sites (
     // 重复打开同一数据库：版本已是最新，迁移不报错且数据不变
     closeTestDatabase(db)
     const reopened = openTestDatabase({ path: dbPath })
-    expect(userVersion(reopened)).toBe(9)
+    expect(userVersion(reopened)).toBe(10)
     expect(tableNames(reopened)).toContain('quick_site_groups')
     expect(countRows(reopened, 'quick_sites')).toBe(1)
   })
@@ -575,7 +579,7 @@ CREATE TABLE quick_sites (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     const columns = db
       .prepare('PRAGMA table_info(quick_sites)')
       .all() as unknown as { name: string }[]
@@ -636,7 +640,7 @@ CREATE TABLE quick_sites (
     closeTestDatabase(first)
 
     const second = openTestDatabase({ path: dbPath })
-    expect(userVersion(second)).toBe(9)
+    expect(userVersion(second)).toBe(10)
     expect(JSON.parse(readTargets(second, 's1'))).toEqual([
       { browserId: 'edge', profileId: 'P1' }
     ])
@@ -673,7 +677,7 @@ CREATE TABLE settings (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(9)
+    expect(userVersion(db)).toBe(10)
     const columns = db
       .prepare('PRAGMA table_info(watchlist)')
       .all() as unknown as { name: string }[]
@@ -685,6 +689,51 @@ CREATE TABLE settings (
       .prepare('SELECT shares, cost FROM watchlist WHERE symbol = ?')
       .get('sh600519') as unknown as { shares: number; cost: number }
     expect(row).toEqual({ shares: 0, cost: 0 })
+  })
+
+  it('v9 数据库升级到 v10 时新增 gold_holding 表且历史数据保留', () => {
+    const dir = makeTempDir()
+    const dbPath = join(dir, 'test.db')
+
+    // 手工构造一个 v9 数据库（尚无 gold_holding 表）
+    const legacy = new DatabaseSync(dbPath)
+    legacy.exec(`
+CREATE TABLE watchlist (
+  symbol     TEXT PRIMARY KEY,
+  code       TEXT NOT NULL,
+  market     TEXT NOT NULL,
+  name       TEXT NOT NULL DEFAULT '',
+  added_at   INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  shares     REAL NOT NULL DEFAULT 0,
+  cost       REAL NOT NULL DEFAULT 0
+);
+`)
+    legacy
+      .prepare(
+        `INSERT INTO watchlist (
+          symbol, code, market, name, added_at, sort_order, shares, cost
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run('sh600519', '600519', 'sh', '贵州茅台', 100, 0, 100, 12.5)
+    legacy.exec('PRAGMA user_version = 9')
+    legacy.close()
+
+    const db = openTestDatabase({ path: dbPath })
+
+    expect(userVersion(db)).toBe(10)
+    expect(tableNames(db)).toContain('gold_holding')
+    const columns = db
+      .prepare('PRAGMA table_info(gold_holding)')
+      .all() as unknown as { name: string }[]
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'grams',
+      'cost',
+      'updated_at'
+    ])
+    expect(countRows(db, 'gold_holding')).toBe(0)
+    expect(countRows(db, 'watchlist')).toBe(1)
   })
 })
 
@@ -920,6 +969,7 @@ describe('openDatabase 迁移幂等与异常数据', () => {
         'alarms',
         'countdowns',
         'file_index',
+        'gold_holding',
         'holiday_cache',
         'notes',
         'quick_site_groups',

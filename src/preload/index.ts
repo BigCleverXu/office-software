@@ -16,6 +16,11 @@ import {
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
 import {
+  GOLD_CHANNELS,
+  type GoldApi,
+  type GoldState
+} from '../shared/gold'
+import {
   UPDATE_CHANNELS,
   type OpenDownloadedResult,
   type ReleaseAsset,
@@ -167,6 +172,26 @@ const market: MarketApi = {
     ipcRenderer.on(MARKET_CHANNELS.navigate, listener)
     return () => {
       ipcRenderer.removeListener(MARKET_CHANNELS.navigate, listener)
+    }
+  }
+}
+
+// 暴露给渲染进程的积存金 API
+const gold: GoldApi = {
+  getState: () => ipcRenderer.invoke(GOLD_CHANNELS.getState),
+  updateHolding: (holding: { grams: number; costPerGram: number }) =>
+    ipcRenderer.invoke(GOLD_CHANNELS.updateHolding, holding),
+  refreshNow: () => ipcRenderer.invoke(GOLD_CHANNELS.refreshNow),
+  onStateChanged: (callback: (state: GoldState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: GoldState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(GOLD_CHANNELS.stateChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(GOLD_CHANNELS.stateChanged, listener)
     }
   }
 }
@@ -560,6 +585,7 @@ const video: VideoApi = {
 const api = {
   alarms,
   market,
+  gold,
   update,
   notes,
   calendar,

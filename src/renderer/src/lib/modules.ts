@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CloudSun,
   Clapperboard,
+  Coins,
   FolderSearch,
   Gamepad2,
   Globe,
@@ -18,6 +19,7 @@ import AlarmPanel from '@/components/AlarmPanel.vue'
 import CalendarPanel from '@/components/CalendarPanel.vue'
 import FileSearchPanel from '@/components/FileSearchPanel.vue'
 import GamesPanel from '@/components/GamesPanel.vue'
+import GoldPanel from '@/components/GoldPanel.vue'
 import MarketPanel from '@/components/MarketPanel.vue'
 import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
@@ -61,6 +63,13 @@ export const MODULES: ModuleMeta[] = [
     description: '大盘指数与自选股行情，交易时段自动刷新',
     icon: LineChart,
     component: MarketPanel
+  },
+  {
+    id: 'gold',
+    label: '积存金',
+    description: '参考上金所 Au99.99 与伦敦金，记录持仓盈亏',
+    icon: Coins,
+    component: GoldPanel
   },
   {
     id: 'weather',

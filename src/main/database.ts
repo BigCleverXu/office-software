@@ -22,7 +22,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -128,6 +128,16 @@ CREATE TABLE IF NOT EXISTS watchlist (
 );
 `
 
+/** gold_holding 单行表建表语句（v10 新增，也用于旧版本升级） */
+const GOLD_HOLDING_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS gold_holding (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  grams      REAL NOT NULL DEFAULT 0,
+  cost       REAL NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -152,7 +162,8 @@ ${NOTES_TABLE_SQL}
 ${COUNTDOWNS_TABLE_SQL}
 ${HOLIDAY_CACHE_TABLE_SQL}
 ${FILE_INDEX_TABLE_SQL}
-${QUICK_SITES_TABLE_SQL}`
+${QUICK_SITES_TABLE_SQL}
+${GOLD_HOLDING_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -185,6 +196,14 @@ interface WatchlistRow {
 interface SettingRow {
   key: string
   value: string
+}
+
+/** gold_holding 单行表行结构 */
+export interface GoldHoldingRow {
+  id: number
+  grams: number
+  cost: number
+  updated_at: number
 }
 
 /** notes 表行结构 */
@@ -303,7 +322,7 @@ function backfillQuickSiteTargets(db: DatabaseSync): void {
  * v5 之前为 notes 补 category 列；v6 之前补 quick_sites 表；
  * v7 之前补 quick_site_groups 表；v8 之前为 quick_sites 补 targets 列
  * 并用旧的 browser_id / profile_id 回填；v9 之前为 watchlist 补持仓列；
- * 已是最新版本则直接返回。
+ * v10 之前补 gold_holding 单行表；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -364,6 +383,10 @@ function applySchema(db: DatabaseSync): void {
       if (!columns.includes('cost')) {
         db.exec('ALTER TABLE watchlist ADD COLUMN cost REAL NOT NULL DEFAULT 0')
       }
+    }
+    if (version < 10) {
+      // v1–v9 -> v10：新增积存金持仓单行表；v0 时重复执行也安全
+      db.exec(GOLD_HOLDING_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')
