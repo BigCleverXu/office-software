@@ -32,9 +32,6 @@ importers:
       lunar-typescript:
         specifier: ^1.8.6
         version: 1.8.6
-      node-hid:
-        specifier: ^3.4.0
-        version: 3.4.0
       reka-ui:
         specifier: ^2.11.0
         version: 2.11.0(vue@3.5.44(typescript@5.9.3))
@@ -2744,10 +2741,6 @@ packages:
     resolution: {integrity: sha512-O9XXMXLeRHQtvh43NCah3y9N1K69tecOmu8Y5p2ay4iXvtpbQr0VaroJF9EmRVp3vkdoj3qn4IFfX+ZYtC94fw==}
     engines: {node: '>=22.12.0'}
 
-  node-addon-api@8.9.2:
-    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
-    engines: {node: ^18 || ^20 || >= 21}
-
   node-api-version@0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
 
@@ -2757,11 +2750,6 @@ packages:
   node-gyp@12.4.0:
     resolution: {integrity: sha512-OMcPNvqTCFUnNaBlmdgq+lfNqY7gTiSmNRDjY3uAXRyudeKZEZxu3CLtjMQrx4zZxCX2b/mpNqTtwuCJgXhHkw==}
     engines: {node: ^20.17.0 || >=22.9.0}
-    hasBin: true
-
-  node-hid@3.4.0:
-    resolution: {integrity: sha512-Br7EO3bJARAJBdtcsGzF/Vs5TjfbkaMdglqLQ+Rk9GOGgVqv5DxYUVH5znLerJU+OfBWw8sd552Ujcprz1bG9g==}
-    engines: {node: '>=10.16'}
     hasBin: true
 
   node-html-parser@7.1.0:
@@ -2919,11 +2907,6 @@ packages:
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
-
-  pkg-prebuilds@1.1.0:
-    resolution: {integrity: sha512-jyai+KTQ2OwbN6iRYw88XbYOMgtpoSYJpjYebx7d9ihqz3txNi3ucsBt3va0iVWe6svSlaqpijMHFF/eJCMZzg==}
-    engines: {node: '>= 14.15.0'}
-    hasBin: true
 
   pkg-types@2.3.3:
     resolution: {integrity: sha512-j/lCFdcppV0JxWpCEITdbDltBxPP6cHT+yNJ6Go2OgoSA9518X847X9z0p6LtA4Nc16+eQzCZjRrWanTGvHJ5w==}
@@ -6347,8 +6330,6 @@ snapshots:
     dependencies:
       semver: 7.7.4
 
-  node-addon-api@8.9.2: {}
-
   node-api-version@0.2.1:
     dependencies:
       semver: 7.7.4
@@ -6367,11 +6348,6 @@ snapshots:
       tinyglobby: 0.2.17
       undici: 6.29.0
       which: 6.0.1
-
-  node-hid@3.4.0:
-    dependencies:
-      node-addon-api: 8.9.2
-      pkg-prebuilds: 1.1.0
 
   node-html-parser@7.1.0:
     dependencies:
@@ -6512,8 +6488,6 @@ snapshots:
   picomatch@4.0.7: {}
 
   pkce-challenge@5.0.1: {}
-
-  pkg-prebuilds@1.1.0: {}
 
   pkg-types@2.3.3:
     dependencies:
