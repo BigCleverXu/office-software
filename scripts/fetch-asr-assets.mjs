@@ -69,7 +69,8 @@ const MODEL_KEY = `shared/whisper/${MODEL.name}`
 const MODEL_LEGACY_KEY = `whisper/${MODEL.name}`
 
 const BUDGET_BYTES = 160 * 1024 * 1024
-const MAX_RETRIES = 2
+// 模型源偶发 502 / 连接中断，多留几次重试，降低 CI 网络抖动导致的发布失败
+const MAX_RETRIES = 4
 
 function log(msg) {
   console.log(msg)
