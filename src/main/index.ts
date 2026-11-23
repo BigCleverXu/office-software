@@ -17,6 +17,7 @@ import {
   type Quote
 } from '../shared/market'
 import { GOLD_CHANNELS } from '../shared/gold'
+import { DEVICE_CHANNELS } from '../shared/devices'
 import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
@@ -24,6 +25,8 @@ import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { GoldStore } from './gold-store'
 import { GoldScheduler } from './gold-scheduler'
+import { createDeviceBackend } from './devices/backend'
+import { DeviceService } from './devices/service'
 import { fetchGoldQuotes } from './gold-provider'
 import { NoteStore } from './note-store'
 import { QuickSiteStore } from './quick-site-store'
@@ -40,6 +43,7 @@ import {
   registerAlarmIpc,
   registerCalendarIpc,
   registerFileSearchIpc,
+  registerDevicesIpc,
   registerMarketIpc,
   registerGoldIpc,
   registerNewsIpc,
@@ -115,6 +119,8 @@ let videoEngineStore: VideoEngineSettingsStore | null = null
 let videoDownloader: VideoDownloader | null = null
 let videoImageDownloader: VideoImageDownloader | null = null
 let videoTranscriptService: VideoTranscriptService | null = null
+/** 设备服务：快照刷新由渲染层可见性驱动，退出时停止 */
+let deviceServiceRef: DeviceService | null = null
 
 /** Windows 原生窗口控件覆盖层高度，与渲染层顶部栏（56px）对齐 */
 const TITLE_BAR_HEIGHT = 56
@@ -502,6 +508,20 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow
   })
 
+  // 设备模块：读取按渲染层可见性触发，主进程不做定时轮询
+  const deviceService = new DeviceService({
+    backend: createDeviceBackend({
+      resourcesDir: is.dev
+        ? join(app.getAppPath(), 'resources')
+        : process.resourcesPath
+    }),
+    onSnapshot: (snapshot) => {
+      mainWindow?.webContents.send(DEVICE_CHANNELS.stateChanged, { snapshot })
+    }
+  })
+  deviceServiceRef = deviceService
+  registerDevicesIpc({ service: deviceService, getWindow: () => mainWindow })
+
   // 短视频模块：解析 / 下载 / 口播服务共用同一数据库中的引擎设置
   const engineStore = new VideoEngineSettingsStore(db)
   videoEngineStore = engineStore
@@ -613,6 +633,8 @@ app.on('before-quit', () => {
   videoDownloader?.cancel()
   videoImageDownloader?.cancel()
   videoTranscriptService?.cancel()
+  deviceServiceRef?.dispose()
+  deviceServiceRef = null
   if (trayTooltipTimer !== null) {
     clearInterval(trayTooltipTimer)
     trayTooltipTimer = null

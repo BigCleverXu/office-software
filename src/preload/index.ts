@@ -107,6 +107,12 @@ import {
   type VideoTranscriptRequest,
   type VideoTranscriptSnapshot
 } from '../shared/video'
+import {
+  DEVICE_CHANNELS,
+  type DeviceActionResult,
+  type DeviceApi,
+  type DeviceState
+} from '../shared/devices'
 
 // 暴露给渲染进程的提醒 API
 const alarms: AlarmApi = {
@@ -582,6 +588,36 @@ const video: VideoApi = {
     ipcRenderer.invoke(VIDEO_CHANNELS.exportText, input)
 }
 
+// 暴露给渲染进程的设备 API
+const devices: DeviceApi = {
+  getState: (): Promise<DeviceState> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.getState),
+  refresh: (): Promise<DeviceState> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.refresh),
+  setMasterVolume: (volume: number): Promise<DeviceActionResult> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.setMasterVolume, volume),
+  setOutputVolume: (id: string, volume: number): Promise<DeviceActionResult> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.setOutputVolume, id, volume),
+  setMuted: (muted: boolean): Promise<DeviceActionResult> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.setMuted, muted),
+  setPointerSpeed: (speed: number): Promise<DeviceActionResult> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.setPointerSpeed, speed),
+  reset: (): Promise<DeviceActionResult> =>
+    ipcRenderer.invoke(DEVICE_CHANNELS.reset),
+  onStateChanged: (callback: (state: DeviceState) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: DeviceState
+    ): void => {
+      callback(data)
+    }
+    ipcRenderer.on(DEVICE_CHANNELS.stateChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(DEVICE_CHANNELS.stateChanged, listener)
+    }
+  }
+}
+
 const api = {
   alarms,
   market,
@@ -594,7 +630,8 @@ const api = {
   weather,
   files,
   quickSites,
-  video
+  video,
+  devices
 }
 
 // 在开启上下文隔离时，通过 contextBridge 暴露 API

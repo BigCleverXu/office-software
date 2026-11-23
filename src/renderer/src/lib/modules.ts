@@ -11,12 +11,14 @@ import {
   Gamepad2,
   Globe,
   LineChart,
+  MonitorSmartphone,
   Newspaper,
   StickyNote
 } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import AlarmPanel from '@/components/AlarmPanel.vue'
 import CalendarPanel from '@/components/CalendarPanel.vue'
+import DevicesPanel from '@/components/DevicesPanel.vue'
 import FileSearchPanel from '@/components/FileSearchPanel.vue'
 import GamesPanel from '@/components/GamesPanel.vue'
 import GoldPanel from '@/components/GoldPanel.vue'
@@ -105,6 +107,13 @@ export const MODULES: ModuleMeta[] = [
     description: '本地文件极速搜索，按类型筛选与预览',
     icon: FolderSearch,
     component: FileSearchPanel
+  },
+  {
+    id: 'devices',
+    label: '设备',
+    description: '查看外设电量，调节系统音量与指针速度',
+    icon: MonitorSmartphone,
+    component: DevicesPanel
   },
   {
     id: 'sites',

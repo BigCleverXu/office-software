@@ -11,6 +11,7 @@ import type { WeatherApi } from '../shared/weather'
 import type { FileSearchApi } from '../shared/files'
 import type { QuickSiteApi } from '../shared/quick-sites'
 import type { VideoApi } from '../shared/video'
+import type { DeviceApi } from '../shared/devices'
 
 declare global {
   interface Window {
@@ -28,6 +29,7 @@ declare global {
       files: FileSearchApi
       quickSites: QuickSiteApi
       video: VideoApi
+      devices: DeviceApi
     }
   }
 }

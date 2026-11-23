@@ -11,6 +11,7 @@ export type AppModuleId =
   | 'video'
   | 'notes'
   | 'files'
+  | 'devices'
   | 'sites'
   | 'games'
 
@@ -25,6 +26,7 @@ export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'video',
   'notes',
   'files',
+  'devices',
   'sites',
   'games'
 ]
