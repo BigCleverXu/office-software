@@ -22,7 +22,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 12
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -138,6 +138,38 @@ CREATE TABLE IF NOT EXISTS gold_holding (
 );
 `
 
+/** water_settings / water_records 建表语句（v11 新增，也用于旧版本升级） */
+const WATER_TABLES_SQL = `
+CREATE TABLE IF NOT EXISTS water_settings (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  cup_ml     INTEGER NOT NULL DEFAULT 500,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS water_records (
+  id         TEXT PRIMARY KEY,
+  amount_ml  INTEGER NOT NULL,
+  drank_at   INTEGER NOT NULL,
+  synced_at  INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_water_records_drank_at ON water_records(drank_at);
+`
+
+/** calendar_events 表与索引建表语句（v12 新增，也用于旧版本升级） */
+const CALENDAR_EVENTS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT '',
+  date       TEXT NOT NULL,
+  start_at   INTEGER NOT NULL,
+  amount_ml  INTEGER NOT NULL DEFAULT 0,
+  source     TEXT NOT NULL DEFAULT 'water',
+  source_id  TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(date);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -163,7 +195,9 @@ ${COUNTDOWNS_TABLE_SQL}
 ${HOLIDAY_CACHE_TABLE_SQL}
 ${FILE_INDEX_TABLE_SQL}
 ${QUICK_SITES_TABLE_SQL}
-${GOLD_HOLDING_TABLE_SQL}`
+${GOLD_HOLDING_TABLE_SQL}
+${WATER_TABLES_SQL}
+${CALENDAR_EVENTS_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -204,6 +238,27 @@ export interface GoldHoldingRow {
   grams: number
   cost: number
   updated_at: number
+}
+
+/** water_records 表行结构 */
+export interface WaterRecordRow {
+  id: string
+  amount_ml: number
+  drank_at: number
+  synced_at: number | null
+  created_at: number
+}
+
+/** calendar_events 表行结构 */
+export interface CalendarEventRow {
+  id: string
+  title: string
+  date: string
+  start_at: number
+  amount_ml: number
+  source: string
+  source_id: string
+  created_at: number
 }
 
 /** notes 表行结构 */
@@ -322,7 +377,8 @@ function backfillQuickSiteTargets(db: DatabaseSync): void {
  * v5 之前为 notes 补 category 列；v6 之前补 quick_sites 表；
  * v7 之前补 quick_site_groups 表；v8 之前为 quick_sites 补 targets 列
  * 并用旧的 browser_id / profile_id 回填；v9 之前为 watchlist 补持仓列；
- * v10 之前补 gold_holding 单行表；已是最新版本则直接返回。
+ * v10 之前补 gold_holding 单行表；v11 之前补喝水设置与水杯记录表；
+ * v12 之前补应用内日程事件表；已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -387,6 +443,14 @@ function applySchema(db: DatabaseSync): void {
     if (version < 10) {
       // v1–v9 -> v10：新增积存金持仓单行表；v0 时重复执行也安全
       db.exec(GOLD_HOLDING_TABLE_SQL)
+    }
+    if (version < 11) {
+      // v1–v10 -> v11：新增喝水设置与记录表；v0 时重复执行也安全
+      db.exec(WATER_TABLES_SQL)
+    }
+    if (version < 12) {
+      // v1–v11 -> v12：新增应用内日程事件表；v0 时重复执行也安全
+      db.exec(CALENDAR_EVENTS_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')

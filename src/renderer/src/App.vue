@@ -4,6 +4,7 @@ import { useLocalStorage, usePreferredDark, useWindowSize } from '@vueuse/core'
 import { Loader2, Settings } from 'lucide-vue-next'
 import type { AppModuleId } from '@shared/navigation'
 import { DEFAULT_MODULE } from '@shared/navigation'
+import { DEFAULT_APP_SETTINGS } from '@shared/settings'
 import type { AppTheme } from '@shared/settings'
 import AppSidebar from '@/components/AppSidebar.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -13,7 +14,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { applyTheme, useSettings } from '@/composables/useSettings'
 import { useUpdateCheck } from '@/composables/useUpdateCheck'
 import { useUpdateDownload } from '@/composables/useUpdateDownload'
-import { MODULES, moduleById } from '@/lib/modules'
+import { MODULES } from '@/lib/modules'
 
 const active = ref<AppModuleId>(DEFAULT_MODULE)
 const collapsed = useLocalStorage('reminder:sidebar-collapsed', false)
@@ -31,6 +32,17 @@ const autoCollapsed = computed(() => viewportWidth.value < NARROW_WIDTH)
 const sidebarCollapsed = computed(() => collapsed.value || autoCollapsed.value)
 
 const { settings } = useSettings()
+
+/** 可见模块 id 集合：设置尚未加载时按默认全量展示，避免侧边栏闪烁 */
+const visibleIds = computed(
+  () => new Set(settings.value?.visibleModules ?? DEFAULT_APP_SETTINGS.visibleModules)
+)
+
+/** 侧边栏与内容区使用的模块列表 */
+const visibleModules = computed(() =>
+  MODULES.filter((module) => visibleIds.value.has(module.id))
+)
+
 const {
   checking: updateChecking,
   open: updateOpen,
@@ -44,7 +56,10 @@ const preferredDark = usePreferredDark()
 /** Windows 使用无边框窗口，顶部栏需要拖动区与右侧控件留白 */
 const isWindows = window.api.update.platform === 'win32'
 
-const currentModule = computed(() => moduleById(active.value))
+const currentModule = computed(
+  () => visibleModules.value.find((module) => module.id === active.value) ??
+    visibleModules.value[0] ?? MODULES[0]
+)
 
 /** 顶栏模块徽章图标：设置页使用齿轮，其余沿用当前模块图标 */
 const headerIcon = computed(() =>
@@ -83,6 +98,19 @@ const select = (id: AppModuleId): void => {
   void window.api.market.setLastPage(id)
 }
 
+/** 活动模块不在可见列表中时回退到第一个可见模块，并同步记忆 */
+const ensureActiveVisible = (): void => {
+  const list = visibleModules.value
+  if (list.length === 0) return
+  if (list.some((module) => module.id === active.value)) return
+  const next = list[0].id
+  active.value = next
+  void window.api.market.setLastPage(next)
+}
+
+// 当前模块被隐藏时切换到第一个可见模块；不关闭设置页，避免配置时被弹出
+watch(visibleModules, ensureActiveVisible)
+
 const openSettings = (): void => {
   showSettings.value = true
 }
@@ -98,9 +126,13 @@ onMounted(async () => {
   })
   const state = await window.api.market.getState()
   active.value = state.settings.lastPage
+  // 记忆的模块可能已被隐藏，启动时同样回退到第一个可见模块
+  ensureActiveVisible()
   unsubscribeNavigate = window.api.market.onNavigate((id) => {
     showSettings.value = false
     active.value = id
+    // 目标模块可能已被隐藏，回退到第一个可见模块避免内容区空白
+    ensureActiveVisible()
   })
 })
 
@@ -117,6 +149,7 @@ onUnmounted(() => {
         :active="active"
         :collapsed="sidebarCollapsed"
         :settings-active="showSettings"
+        :modules="visibleModules"
         @select="select"
         @settings="openSettings"
         @toggle="toggleCollapsed"
@@ -146,7 +179,7 @@ onUnmounted(() => {
 
         <div class="app-canvas min-w-0 flex-1 overflow-hidden">
           <SettingsPanel v-if="showSettings" class="animate-fade-in" />
-          <template v-for="module in MODULES" :key="module.id">
+          <template v-for="module in visibleModules" :key="module.id">
             <Transition name="page">
               <component
                 :is="module.component"

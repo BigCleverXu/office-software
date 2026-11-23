@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Droplets } from 'lucide-vue-next'
 import { buildMonthGrid, parseDateOnly } from '@shared/calendar'
 import type {
+  CalendarEvent,
   Countdown,
   HolidayEntry,
   HolidayType,
@@ -23,9 +24,12 @@ const props = withDefaults(
     selectedDate?: string | null
     /** 按日期分组的倒计日，用于在月历格子内展示 */
     countdownsByDate?: Record<string, Countdown[]>
+    /** 按日期分组的日程事件，用于在月历格子内展示 */
+    eventsByDate?: Record<string, CalendarEvent[]>
   }>(),
   {
-    countdownsByDate: () => ({})
+    countdownsByDate: () => ({}),
+    eventsByDate: () => ({})
   }
 )
 
@@ -35,6 +39,7 @@ const emit = defineEmits<{
   select: [cell: MonthCell]
   'context-menu': [payload: { cell: MonthCell; x: number; y: number }]
   'open-countdown': [countdown: Countdown]
+  'open-day': [date: string]
 }>()
 
 /** 周一为每周第一天的表头 */
@@ -205,6 +210,34 @@ function countdownClass(cell: MonthCell): string[] {
     : [...COUNTDOWN_ITEM_CLASS, 'bg-primary/10 text-primary']
 }
 
+/** 某日的日程事件 */
+function eventsOf(date: string): CalendarEvent[] {
+  return props.eventsByDate[date] ?? []
+}
+
+/** 事件胶囊基础样式：水滴图标 + 文案单行 */
+const EVENT_BADGE_CLASS = [
+  'flex w-full min-w-0 items-center gap-1 rounded px-1',
+  'text-[10px] leading-4',
+  'cursor-pointer',
+  'focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-none'
+]
+
+/** 事件胶囊样式：选中态反色，普通态用喝水浅底 */
+function eventBadgeClass(cell: MonthCell): string[] {
+  return isSelected(cell.date)
+    ? [
+        ...EVENT_BADGE_CLASS,
+        'bg-primary-foreground/20 text-primary-foreground'
+      ]
+    : [...EVENT_BADGE_CLASS, 'bg-water-surface/60 text-water-deep']
+}
+
+/** 打开日期详情：点击与键盘共用同一逻辑 */
+function openDay(date: string): void {
+  emit('open-day', date)
+}
+
 /** 跨月切换：1 月上一月回到上一年 12 月 */
 function shiftMonth(offset: number): void {
   const target = new Date(props.year, props.month - 1 + offset, 1)
@@ -349,6 +382,22 @@ function cellClass(cell: MonthCell, index: number): string[] {
           :class="holidayNameClass(cell)"
         >
           {{ visibleHolidayName(cell.date) }}
+        </span>
+
+        <span
+          v-if="cell.inMonth && eventsOf(cell.date).length > 0"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看 ${cell.date} 的喝水记录，共 ${eventsOf(cell.date).length} 条`"
+          :class="eventBadgeClass(cell)"
+          @click.stop="openDay(cell.date)"
+          @keydown.enter.prevent="openDay(cell.date)"
+          @keydown.space.prevent="openDay(cell.date)"
+        >
+          <Droplets class="size-2.5 shrink-0" aria-hidden="true" />
+          <span class="min-w-0 flex-1 truncate">
+            喝水 {{ eventsOf(cell.date).length }}
+          </span>
         </span>
 
         <span

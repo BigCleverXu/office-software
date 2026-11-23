@@ -4,6 +4,7 @@
 export type AppModuleId =
   | 'alarms'
   | 'calendar'
+  | 'water'
   | 'market'
   | 'gold'
   | 'weather'
@@ -19,6 +20,7 @@ export type AppModuleId =
 export const APP_MODULE_IDS: readonly AppModuleId[] = [
   'alarms',
   'calendar',
+  'water',
   'market',
   'gold',
   'weather',

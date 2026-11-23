@@ -1,6 +1,6 @@
 {
   "name": "reminder-app",
-  "version": "2.11.0",
+  "version": "2.11.4",
   "description": "桌面端效率工具：提醒、日历、行情、天气、热点、便签、文件搜索与快捷站点",
   "main": "./out/main/index.js",
   "author": "BigCleverXu",
@@ -38,6 +38,7 @@
     "dayjs": "^1.11.23",
     "lucide-vue-next": "^1.0.0",
     "lunar-typescript": "^1.8.6",
+    "node-hid": "^3.4.0",
     "reka-ui": "^2.11.0",
     "tailwind-merge": "^3.7.0",
     "tw-animate-css": "^1.4.0"
@@ -69,7 +70,8 @@
     "onlyBuiltDependencies": [
       "electron",
       "esbuild",
-      "ffmpeg-static"
+      "ffmpeg-static",
+      "node-hid"
     ]
   }
 }

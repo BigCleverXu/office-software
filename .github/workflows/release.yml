@@ -95,4 +95,3 @@ jobs:
             dist/*.AppImage
             dist/*.deb
           fail_on_unmatched_files: false
-          generate_release_notes: true

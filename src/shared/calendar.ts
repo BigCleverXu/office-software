@@ -43,6 +43,26 @@ export interface CountdownDraft {
 /** 倒计日标题最大长度 */
 export const COUNTDOWN_TITLE_MAX_LENGTH = 50
 
+/** 日程事件来源（当前只有喝水同步） */
+export type CalendarEventSource = 'water'
+
+/** 一条应用内日程事件 */
+export interface CalendarEvent {
+  id: string
+  /** 展示标题，如「喝水 500 ml」 */
+  title: string
+  /** 本地自然日 YYYY-MM-DD */
+  date: string
+  /** 开始时间戳（毫秒） */
+  startAt: number
+  /** 饮水量（毫升），非喝水事件为 0 */
+  amountMl: number
+  source: CalendarEventSource
+  /** 来源数据 id，用于去重与联动删除 */
+  sourceId: string
+  createdAt: number
+}
+
 /** 倒计日状态描述 */
 export interface CountdownDescription {
   status: 'future' | 'today' | 'past'
@@ -58,7 +78,9 @@ export const CALENDAR_CHANNELS = {
   removeCountdown: 'calendar:countdowns:delete',
   countdownsChanged: 'calendar:countdowns:changed',
   getHolidays: 'calendar:holidays:get',
-  holidaysChanged: 'calendar:holidays:changed'
+  holidaysChanged: 'calendar:holidays:changed',
+  listEvents: 'calendar:events:list',
+  eventsChanged: 'calendar:events:changed'
 } as const
 
 /** 渲染进程可用的日历 API（由 preload 暴露） */
@@ -73,6 +95,8 @@ export interface CalendarApi {
   getHolidays: (year: number) => Promise<HolidayYear>
   onCountdownsChanged: (callback: (items: Countdown[]) => void) => () => void
   onHolidaysChanged: (callback: (data: HolidayYear) => void) => () => void
+  listEvents: (from: string, to: string) => Promise<CalendarEvent[]>
+  onEventsChanged: (callback: () => void) => () => void
 }
 
 /** 月视图单元格 */
@@ -255,4 +279,38 @@ export function buildMonthGrid(year: number, month: number): MonthCell[] {
     })
   }
   return cells
+}
+
+/**
+ * 把时间戳格式化为其所在本地自然日的 YYYY-MM-DD。
+ * 非有限时间戳返回空字符串。
+ */
+export function eventDateKey(timestamp: number): string {
+  if (!Number.isFinite(timestamp)) {
+    return ''
+  }
+  const date = new Date(timestamp)
+  if (!Number.isFinite(date.getTime())) {
+    return ''
+  }
+  return formatDateOnly(date)
+}
+
+/**
+ * 按日期字段把事件分组，保持输入顺序。
+ * 返回新对象与新数组，不修改入参。
+ */
+export function groupEventsByDate(
+  events: readonly CalendarEvent[]
+): Record<string, CalendarEvent[]> {
+  const groups: Record<string, CalendarEvent[]> = {}
+  for (const event of events) {
+    const bucket = groups[event.date]
+    if (bucket) {
+      bucket.push(event)
+    } else {
+      groups[event.date] = [event]
+    }
+  }
+  return groups
 }

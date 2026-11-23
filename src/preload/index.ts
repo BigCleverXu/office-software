@@ -21,6 +21,12 @@ import {
   type GoldState
 } from '../shared/gold'
 import {
+  WATER_CHANNELS,
+  type WaterApi,
+  type WaterState,
+  type WaterSyncResult
+} from '../shared/water'
+import {
   UPDATE_CHANNELS,
   type OpenDownloadedResult,
   type ReleaseAsset,
@@ -39,6 +45,7 @@ import {
 import {
   CALENDAR_CHANNELS,
   type CalendarApi,
+  type CalendarEvent,
   type Countdown,
   type CountdownDraft,
   type HolidayYear
@@ -202,6 +209,19 @@ const gold: GoldApi = {
   }
 }
 
+// 暴露给渲染进程的喝水 API
+const water: WaterApi = {
+  getState: (): Promise<WaterState> =>
+    ipcRenderer.invoke(WATER_CHANNELS.getState),
+  addCup: (): Promise<WaterState> => ipcRenderer.invoke(WATER_CHANNELS.addCup),
+  setCupMl: (cupMl: number): Promise<WaterState | null> =>
+    ipcRenderer.invoke(WATER_CHANNELS.setCup, cupMl),
+  removeLast: (): Promise<WaterState> =>
+    ipcRenderer.invoke(WATER_CHANNELS.removeLast),
+  syncCalendar: (): Promise<WaterSyncResult> =>
+    ipcRenderer.invoke(WATER_CHANNELS.syncCalendar)
+}
+
 const update: UpdateApi = {
   platform: process.platform,
   arch: process.arch,
@@ -308,6 +328,18 @@ const calendar: CalendarApi = {
     ipcRenderer.on(CALENDAR_CHANNELS.holidaysChanged, listener)
     return () => {
       ipcRenderer.removeListener(CALENDAR_CHANNELS.holidaysChanged, listener)
+    }
+  },
+  listEvents: (from: string, to: string): Promise<CalendarEvent[]> =>
+    ipcRenderer.invoke(CALENDAR_CHANNELS.listEvents, from, to),
+  onEventsChanged: (callback: () => void) => {
+    // 广播载荷为空，渲染层收到后自行按区间重新加载
+    const listener = (): void => {
+      callback()
+    }
+    ipcRenderer.on(CALENDAR_CHANNELS.eventsChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(CALENDAR_CHANNELS.eventsChanged, listener)
     }
   }
 }
@@ -622,6 +654,7 @@ const api = {
   alarms,
   market,
   gold,
+  water,
   update,
   notes,
   calendar,

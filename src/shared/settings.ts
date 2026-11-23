@@ -1,6 +1,8 @@
 // 设置模块共享契约：类型 + 校验纯函数 + IPC 通道
 // 仅依赖语言内置能力，主进程 / preload / 渲染层共用
 
+import { APP_MODULE_IDS, isAppModuleId, type AppModuleId } from './navigation'
+
 /** 主题模式：跟随系统 / 浅色 / 深色 */
 export type AppTheme = 'system' | 'light' | 'dark'
 
@@ -10,12 +12,15 @@ export interface AppSettings {
   launchAtLogin: boolean
   /** 主题模式 */
   theme: AppTheme
+  /** 侧边栏显示的模块 id，顺序不影响展示顺序 */
+  visibleModules: AppModuleId[]
 }
 
 /** 默认设置（也是非法数据的兜底值） */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   launchAtLogin: false,
-  theme: 'system'
+  theme: 'system',
+  visibleModules: [...APP_MODULE_IDS]
 }
 
 /** 合法主题集合 */
@@ -30,14 +35,32 @@ function isAppTheme(value: unknown): value is AppTheme {
 }
 
 /**
+ * 规范化可见模块列表：只接受数组，过滤未知 id 与重复项，
+ * 结果按 APP_MODULE_IDS 的固定顺序排列；空数组或全部非法时回退为全部模块。
+ */
+export function normalizeVisibleModules(raw: unknown): AppModuleId[] {
+  if (!Array.isArray(raw)) {
+    return [...APP_MODULE_IDS]
+  }
+  const picked = new Set<AppModuleId>()
+  for (const value of raw) {
+    if (isAppModuleId(value)) {
+      picked.add(value)
+    }
+  }
+  const ordered = APP_MODULE_IDS.filter((id) => picked.has(id))
+  return ordered.length > 0 ? [...ordered] : [...APP_MODULE_IDS]
+}
+
+/**
  * 逐字段校验设置：只接受普通对象，布尔字段非 boolean 回退默认，
- * theme 仅接受三个枚举值否则回退 'system'，未知字段忽略。
- * 任何异常都返回默认设置，不向调用方抛出。
+ * theme 仅接受三个枚举值否则回退 'system'，visibleModules 逐项校验并回退全部模块，
+ * 未知字段忽略。任何异常都返回默认设置（数组为新副本），不向调用方抛出。
  */
 export function normalizeAppSettings(raw: unknown): AppSettings {
   try {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      return { ...DEFAULT_APP_SETTINGS }
+      return { ...DEFAULT_APP_SETTINGS, visibleModules: [...APP_MODULE_IDS] }
     }
     const record = raw as Record<string, unknown>
     return {
@@ -47,10 +70,11 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
           : DEFAULT_APP_SETTINGS.launchAtLogin,
       theme: isAppTheme(record.theme)
         ? record.theme
-        : DEFAULT_APP_SETTINGS.theme
+        : DEFAULT_APP_SETTINGS.theme,
+      visibleModules: normalizeVisibleModules(record.visibleModules)
     }
   } catch {
-    return { ...DEFAULT_APP_SETTINGS }
+    return { ...DEFAULT_APP_SETTINGS, visibleModules: [...APP_MODULE_IDS] }
   }
 }
 

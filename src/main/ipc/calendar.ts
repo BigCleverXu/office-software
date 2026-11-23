@@ -7,11 +7,13 @@ import type {
   HolidayYear
 } from '../../shared/calendar'
 import type { CountdownStore } from '../countdown-store'
+import type { CalendarEventStore } from '../calendar-event-store'
 import type { HolidayService } from '../holiday-service'
 
 export interface CalendarIpcDeps {
   countdownStore: CountdownStore
   holidayService: HolidayService
+  eventStore: CalendarEventStore
   getWindow: () => BrowserWindow | null
 }
 
@@ -20,9 +22,10 @@ export interface CalendarIpcDeps {
  *
  * 节假日读取走 HolidayService 的同步缓存（含内置数据），后台刷新成功后
  * 由 holidayService 的 onUpdated 回调推送，因此这里不 await 网络请求。
+ * 日程事件只提供按区间查询，变更广播由喝水 IPC 经 main/index.ts 统一发送。
  */
 export function registerCalendarIpc(deps: CalendarIpcDeps): void {
-  const { countdownStore, holidayService, getWindow } = deps
+  const { countdownStore, holidayService, eventStore, getWindow } = deps
 
   const broadcastCountdowns = (): void => {
     getWindow()?.webContents.send(
@@ -70,5 +73,15 @@ export function registerCalendarIpc(deps: CalendarIpcDeps): void {
     CALENDAR_CHANNELS.getHolidays,
     (_event: Electron.IpcMainInvokeEvent, year: number): HolidayYear =>
       holidayService.getYear(year)
+  )
+
+  // 按日期闭区间读取应用内日程事件，非法区间由 store 兜底为空数组
+  ipcMain.handle(
+    CALENDAR_CHANNELS.listEvents,
+    (_event: Electron.IpcMainInvokeEvent, from: unknown, to: unknown) =>
+      eventStore.listByDateRange(
+        typeof from === 'string' ? from : '',
+        typeof to === 'string' ? to : ''
+      )
   )
 }

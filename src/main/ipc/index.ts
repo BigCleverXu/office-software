@@ -5,6 +5,7 @@ export { registerWeatherIpc, type WeatherIpcDeps } from './weather'
 export { registerCalendarIpc, type CalendarIpcDeps } from './calendar'
 export { registerMarketIpc, type MarketIpcDeps } from './market'
 export { registerGoldIpc, type GoldIpcDeps } from './gold'
+export { registerWaterIpc, type WaterIpcDeps } from './water'
 export { registerDevicesIpc, type DevicesIpcDeps } from './devices'
 export {
   registerUpdateIpc,

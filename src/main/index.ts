@@ -25,6 +25,7 @@ import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { GoldStore } from './gold-store'
 import { GoldScheduler } from './gold-scheduler'
+import { WaterStore } from './water-store'
 import { createDeviceBackend } from './devices/backend'
 import { DeviceService } from './devices/service'
 import { fetchGoldQuotes } from './gold-provider'
@@ -35,6 +36,7 @@ import { NewsStore } from './news-store'
 import { WeatherStore } from './weather-store'
 import { WeatherService } from './weather-service'
 import { CountdownStore } from './countdown-store'
+import { CalendarEventStore } from './calendar-event-store'
 import { HolidayService } from './holiday-service'
 import { CALENDAR_CHANNELS } from '../shared/calendar'
 import { WEATHER_CHANNELS } from '../shared/weather'
@@ -46,6 +48,7 @@ import {
   registerDevicesIpc,
   registerMarketIpc,
   registerGoldIpc,
+  registerWaterIpc,
   registerNewsIpc,
   registerNotesIpc,
   registerQuickSiteGroupIpc,
@@ -413,11 +416,18 @@ app.whenReady().then(() => {
       mainWindow?.webContents.send(CALENDAR_CHANNELS.holidaysChanged, data)
     }
   })
+  const calendarEventStore = new CalendarEventStore(db)
   registerCalendarIpc({
     countdownStore,
     holidayService,
+    eventStore: calendarEventStore,
     getWindow: () => mainWindow
   })
+
+  /** 日程事件变更广播：渲染层收到后按当前可见区间重新加载 */
+  const notifyCalendarEvents = (): void => {
+    mainWindow?.webContents.send(CALENDAR_CHANNELS.eventsChanged)
+  }
 
   const marketScheduler = new MarketScheduler({
     fetchQuotes: (symbols) => fetchQuotes(symbols),
@@ -493,6 +503,14 @@ app.whenReady().then(() => {
     store: goldStore,
     scheduler: goldScheduler,
     getWindow: () => mainWindow
+  })
+
+  // 喝水：杯容量与记录存库，同步时写入应用内日历事件
+  const waterStore = new WaterStore(db)
+  registerWaterIpc({
+    store: waterStore,
+    calendarEvents: calendarEventStore,
+    notifyCalendarEvents
   })
 
   registerUpdateIpc({

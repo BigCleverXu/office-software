@@ -8,12 +8,13 @@ import {
   TooltipContent,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { MODULES } from '@/lib/modules'
+import type { ModuleMeta } from '@/lib/modules'
 
 const props = defineProps<{
   active: AppModuleId
   collapsed: boolean
   settingsActive: boolean
+  modules: ModuleMeta[]
 }>()
 
 const emit = defineEmits<{
@@ -34,7 +35,7 @@ interface NavItem {
 
 /** 侧边栏导航项：预计算选中态类名，避免在模板中调用方法 */
 const navItems = computed<NavItem[]>(() =>
-  MODULES.map((module) => ({
+  props.modules.map((module) => ({
     id: module.id,
     label: module.label,
     icon: module.icon,

@@ -43,6 +43,11 @@
   --color-weather-bolt: var(--weather-bolt);
   --color-weather-dusk: var(--weather-dusk);
 
+  --color-water-deep: var(--water-deep);
+  --color-water-mid: var(--water-mid);
+  --color-water-surface: var(--water-surface);
+  --color-water-glow: var(--water-glow);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -97,6 +102,11 @@
   --weather-snow: oklch(0.62 0.07 230);
   --weather-bolt: oklch(0.655 0.16 95);
   --weather-dusk: oklch(0.52 0.13 300);
+  /* 喝水语义色：白色卡片上保持可读的水蓝层次 */
+  --water-deep: oklch(0.6 0.14 238);
+  --water-mid: oklch(0.73 0.12 222);
+  --water-surface: oklch(0.88 0.06 205);
+  --water-glow: oklch(0.72 0.13 220 / 35%);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -146,6 +156,11 @@
   --weather-snow: oklch(0.87 0.07 230);
   --weather-bolt: oklch(0.89 0.15 100);
   --weather-dusk: oklch(0.72 0.12 300);
+  /* 喝水语义色：深色卡片上整体提亮 */
+  --water-deep: oklch(0.63 0.16 240);
+  --water-mid: oklch(0.75 0.13 225);
+  --water-surface: oklch(0.87 0.08 210);
+  --water-glow: oklch(0.72 0.15 222 / 45%);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -245,6 +260,39 @@
   }
   to {
     transform: translateX(100%);
+  }
+}
+
+@keyframes water-wave {
+  0% {
+    transform: translateX(-25%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes water-bubble {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-70px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes water-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 
@@ -390,6 +438,203 @@
   animation: shimmer 1.6s ease-in-out infinite;
 }
 
+/* 喝水模块：水杯造型与注水动效 */
+.water-glass {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 8rem;
+  height: 10rem;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.water-glass:focus-visible {
+  border-radius: 1rem;
+  outline: 2px solid color-mix(in oklab, var(--ring) 70%, transparent);
+  outline-offset: 6px;
+}
+
+.water-glass[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* 长按进度环：按住时 500ms 线性走满，松开立即复位 */
+.water-ring {
+  position: absolute;
+  top: -0.5rem;
+  left: -0.5rem;
+  width: calc(100% + 1rem);
+  height: calc(100% + 1rem);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.water-ring-track,
+.water-ring-progress {
+  fill: none;
+  stroke-width: 3;
+}
+
+.water-ring-track {
+  stroke: color-mix(in oklab, var(--water-mid) 18%, transparent);
+}
+
+.water-ring-progress {
+  stroke: var(--water-mid);
+  stroke-linecap: round;
+  stroke-dasharray: 289;
+  stroke-dashoffset: 289;
+  transition: none;
+}
+
+.water-ring-progress.is-holding {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 500ms linear;
+}
+
+.water-glass-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  clip-path: polygon(3% 0%, 97% 0%, 74% 100%, 26% 100%);
+  background: color-mix(in oklab, var(--water-mid) 45%, transparent);
+}
+
+/* 内壁：比外轮廓内缩一点，形成杯沿描边 */
+.water-glass-shell::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+  clip-path: inherit;
+}
+
+/* 杯口椭圆暗示，超出部分由杯身裁切 */
+.water-glass-shell::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--water-surface) 45%, transparent);
+}
+
+.water-glass-inner {
+  position: absolute;
+  inset: 2px;
+  overflow: hidden;
+  clip-path: polygon(3% 0%, 97% 0%, 74% 100%, 26% 100%);
+}
+
+.water-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--water-mid) 92%, oklch(1 0 0)) 0%,
+    color-mix(in oklab, var(--water-deep) 88%, oklch(1 0 0)) 100%
+  );
+  transition: height 1400ms var(--ease-soft);
+}
+
+.water-fill-instant {
+  transition: none;
+}
+
+/* 水面：双层错位波纹，左右溢出由杯身裁切 */
+.water-surface {
+  position: absolute;
+  top: -5px;
+  right: -12%;
+  left: -12%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+.water-wave {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--water-surface) 65%, transparent);
+  opacity: 0.6;
+  animation: water-wave 3.4s ease-in-out infinite alternate;
+}
+
+.water-wave:nth-child(2) {
+  top: 3px;
+  opacity: 0.4;
+  animation-direction: alternate-reverse;
+  animation-duration: 2.4s;
+}
+
+/* 杯内气泡：5 个错位上浮 */
+.water-bubble {
+  position: absolute;
+  bottom: 6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--water-surface) 85%, transparent);
+  opacity: 0;
+  animation: water-bubble 2.8s ease-in infinite;
+}
+
+.water-bubble:nth-of-type(1) {
+  left: 22%;
+  animation-delay: 0s;
+}
+
+.water-bubble:nth-of-type(2) {
+  left: 38%;
+  width: 3px;
+  height: 3px;
+  animation-delay: 0.6s;
+}
+
+.water-bubble:nth-of-type(3) {
+  left: 52%;
+  animation-delay: 1.2s;
+}
+
+.water-bubble:nth-of-type(4) {
+  left: 66%;
+  width: 3px;
+  height: 3px;
+  animation-delay: 0.3s;
+}
+
+.water-bubble:nth-of-type(5) {
+  left: 78%;
+  animation-delay: 1.7s;
+}
+
+/* 满杯 / 注水时杯身外的呼吸光晕 */
+.water-glass-halo {
+  position: absolute;
+  inset: 12% 4%;
+  z-index: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    60% 60% at 50% 55%,
+    var(--water-glow),
+    transparent 72%
+  );
+  filter: blur(14px);
+  pointer-events: none;
+  animation: water-glow 2.6s ease-in-out infinite;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent)
@@ -457,6 +702,24 @@ a:focus-visible,
 
   .card-interactive:hover {
     transform: none;
+  }
+
+  .water-wave,
+  .water-bubble,
+  .water-glass-halo {
+    animation: none !important;
+  }
+
+  .water-bubble {
+    display: none;
+  }
+
+  .water-fill {
+    transition-duration: 1ms !important;
+  }
+
+  .water-ring-progress.is-holding {
+    transition-duration: 1ms !important;
   }
 }
 

@@ -2,11 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { CalendarDays, Plus } from 'lucide-vue-next'
 import type {
+  CalendarEvent,
   Countdown,
   CountdownDraft,
   HolidayEntry,
   MonthCell
 } from '@shared/calendar'
+import { buildMonthGrid, groupEventsByDate } from '@shared/calendar'
 import CountdownCard from '@/components/CountdownCard.vue'
 import CountdownDetailDialog from '@/components/CountdownDetailDialog.vue'
 import CountdownFormDialog from '@/components/CountdownFormDialog.vue'
@@ -37,7 +39,9 @@ const {
   holidays,
   holidaySource,
   holidayLoading,
+  events,
   loadHolidays,
+  loadEvents,
   create,
   update,
   remove
@@ -98,6 +102,26 @@ const showHolidayFallback = computed(
     (holidaySource.value === 'none' || holidays.value.length === 0)
 )
 
+/** 当前月网格覆盖的日期区间（含跨月补位日期） */
+const monthRange = computed(() => {
+  const grid = buildMonthGrid(year.value, month.value)
+  return { from: grid[0].date, to: grid[grid.length - 1].date }
+})
+
+// 切月或切年都按当前可见区间重新加载日程事件
+watch(
+  [year, month],
+  () => {
+    void loadEvents(monthRange.value.from, monthRange.value.to)
+  },
+  { immediate: true }
+)
+
+/** 日程事件按日期分组，供月历格子与日期详情使用 */
+const eventsByDate = computed<Record<string, CalendarEvent[]>>(() =>
+  groupEventsByDate(events.value)
+)
+
 /** 倒计日按目标日期分组，沿用列表已有的排序 */
 const countdownsByDate = computed<Record<string, Countdown[]>>(() => {
   const map: Record<string, Countdown[]> = {}
@@ -128,6 +152,11 @@ const dayCountdowns = computed(
     (dayDetailDate.value
       ? countdownsByDate.value[dayDetailDate.value]
       : undefined) ?? []
+)
+
+/** 日期详情弹窗展示的该日日程事件 */
+const dayEvents = computed(() =>
+  dayDetailDate.value ? (eventsByDate.value[dayDetailDate.value] ?? []) : []
 )
 
 const dialogOpen = ref(false)
@@ -184,6 +213,12 @@ const handleMenuCreate = (): void => {
   menuOpen.value = false
   if (!date) return
   handleCreateAt({ date, day: Number(date.slice(8, 10)), inMonth: true })
+}
+
+/** 打开指定日期的详情弹窗 */
+const handleOpenDay = (date: string): void => {
+  dayDetailDate.value = date
+  dayDetailOpen.value = true
 }
 
 /** 右键菜单查看详情 */
@@ -350,9 +385,11 @@ const handleDetailRemove = async (): Promise<void> => {
             :holidays="calendarHolidays"
             :selected-date="selectedDate"
             :countdowns-by-date="countdownsByDate"
+            :events-by-date="eventsByDate"
             @select="handleSelect"
             @context-menu="handleContextMenu"
             @open-countdown="openDetail"
+            @open-day="handleOpenDay"
           />
         </div>
 
@@ -442,6 +479,7 @@ const handleDetailRemove = async (): Promise<void> => {
       v-model:open="dayDetailOpen"
       :date="dayDetailDate"
       :countdowns="dayCountdowns"
+      :events="dayEvents"
       @create="handleDayCreate"
       @open-countdown="handleDayOpenCountdown"
     />

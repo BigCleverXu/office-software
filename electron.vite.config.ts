@@ -1,11 +1,12 @@
 import { resolve } from 'path'
-import { defineConfig } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  // 依赖外部化：node-hid 等原生模块保持 require，不打进 bundle
+  main: { plugins: [externalizeDepsPlugin()] },
+  preload: { plugins: [externalizeDepsPlugin()] },
   renderer: {
     resolve: {
       alias: {

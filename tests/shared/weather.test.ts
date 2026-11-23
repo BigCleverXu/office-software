@@ -277,10 +277,11 @@ describe('DEFAULT_CITY', () => {
 })
 
 describe('APP_MODULE_IDS', () => {
-  it('包含 weather 且顺序为提醒/日历/行情/积存金/天气/热点/短视频/便签/文件/设备/网站/游戏', () => {
+  it('包含 weather 且顺序为提醒/日历/喝水/行情/积存金/天气/热点/短视频/便签/文件/设备/网站/游戏', () => {
     expect(APP_MODULE_IDS).toEqual([
       'alarms',
       'calendar',
+      'water',
       'market',
       'gold',
       'weather',

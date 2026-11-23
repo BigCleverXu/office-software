@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { APP_MODULE_IDS } from '../../src/shared/navigation'
 import {
   DEFAULT_APP_SETTINGS,
   type AppSettings
@@ -42,11 +43,16 @@ describe('SettingsStore.update', () => {
   it('局部更新合并，未提供字段保持原值', () => {
     expect(store.update({ launchAtLogin: true })).toEqual({
       launchAtLogin: true,
-      theme: 'system'
+      theme: 'system',
+      visibleModules: [...APP_MODULE_IDS]
     })
 
     const merged = store.update({ theme: 'dark' })
-    expect(merged).toEqual({ launchAtLogin: true, theme: 'dark' })
+    expect(merged).toEqual({
+      launchAtLogin: true,
+      theme: 'dark',
+      visibleModules: [...APP_MODULE_IDS]
+    })
     expect(store.get()).toEqual(merged)
   })
 })
@@ -61,14 +67,19 @@ describe('SettingsStore 非法值回退', () => {
 
     expect(store.update(patch)).toEqual({
       launchAtLogin: false,
-      theme: 'system'
+      theme: 'system',
+      visibleModules: [...APP_MODULE_IDS]
     })
   })
 
   it('数据库中布尔字段为字符串、theme 非法时逐字段回退', () => {
     writeRawAppValue(JSON.stringify({ launchAtLogin: 'true', theme: 'blue' }))
 
-    expect(store.get()).toEqual({ launchAtLogin: false, theme: 'system' })
+    expect(store.get()).toEqual({
+      launchAtLogin: false,
+      theme: 'system',
+      visibleModules: [...APP_MODULE_IDS]
+    })
   })
 
   it('数据库为数组等非对象结构时回退默认', () => {
@@ -86,8 +97,16 @@ describe('SettingsStore 未知字段', () => {
     } as unknown as Partial<AppSettings>
 
     const updated = store.update(patch)
-    expect(updated).toEqual({ launchAtLogin: false, theme: 'dark' })
-    expect(Object.keys(updated)).toEqual(['launchAtLogin', 'theme'])
+    expect(updated).toEqual({
+      launchAtLogin: false,
+      theme: 'dark',
+      visibleModules: [...APP_MODULE_IDS]
+    })
+    expect(Object.keys(updated)).toEqual([
+      'launchAtLogin',
+      'theme',
+      'visibleModules'
+    ])
     expect('unknownField' in updated).toBe(false)
   })
 
@@ -96,7 +115,11 @@ describe('SettingsStore 未知字段', () => {
       JSON.stringify({ launchAtLogin: true, theme: 'light', extra: 1 })
     )
 
-    expect(store.get()).toEqual({ launchAtLogin: true, theme: 'light' })
+    expect(store.get()).toEqual({
+      launchAtLogin: true,
+      theme: 'light',
+      visibleModules: [...APP_MODULE_IDS]
+    })
 
     store.update({})
     const stored = db
@@ -104,7 +127,8 @@ describe('SettingsStore 未知字段', () => {
       .get('app') as unknown as { value: string }
     expect(Object.keys(JSON.parse(stored.value))).toEqual([
       'launchAtLogin',
-      'theme'
+      'theme',
+      'visibleModules'
     ])
   })
 })
@@ -114,7 +138,11 @@ describe('SettingsStore 持久化', () => {
     store.update({ launchAtLogin: true, theme: 'dark' })
 
     const reloaded = new SettingsStore(db)
-    expect(reloaded.get()).toEqual({ launchAtLogin: true, theme: 'dark' })
+    expect(reloaded.get()).toEqual({
+      launchAtLogin: true,
+      theme: 'dark',
+      visibleModules: [...APP_MODULE_IDS]
+    })
   })
 
   it('多次更新后 settings 表中 app 只有一行', () => {
@@ -126,7 +154,42 @@ describe('SettingsStore 持久化', () => {
       .prepare('SELECT COUNT(*) AS n FROM settings WHERE key = ?')
       .get('app') as unknown as CountRow
     expect(row.n).toBe(1)
-    expect(store.get()).toEqual({ launchAtLogin: false, theme: 'dark' })
+    expect(store.get()).toEqual({
+      launchAtLogin: false,
+      theme: 'dark',
+      visibleModules: [...APP_MODULE_IDS]
+    })
+  })
+})
+
+describe('SettingsStore visibleModules', () => {
+  it('更新为子集后按固定顺序返回并持久化', () => {
+    expect(store.update({ visibleModules: ['weather', 'alarms'] })).toEqual({
+      launchAtLogin: false,
+      theme: 'system',
+      visibleModules: ['alarms', 'weather']
+    })
+
+    const reloaded = new SettingsStore(db)
+    expect(reloaded.get().visibleModules).toEqual(['alarms', 'weather'])
+  })
+
+  it('空数组回退为全部模块', () => {
+    store.update({ visibleModules: [] })
+
+    expect(store.get().visibleModules).toEqual([...APP_MODULE_IDS])
+  })
+
+  it('数据库中的非法 id 被过滤', () => {
+    writeRawAppValue(JSON.stringify({ visibleModules: ['water', 'nope'] }))
+
+    expect(store.get().visibleModules).toEqual(['water'])
+  })
+
+  it('数据库中的非数组值回退为全部模块', () => {
+    writeRawAppValue(JSON.stringify({ visibleModules: 'water' }))
+
+    expect(store.get().visibleModules).toEqual([...APP_MODULE_IDS])
   })
 })
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CalendarDays, Plus } from 'lucide-vue-next'
+import { CalendarDays, Droplets, Plus } from 'lucide-vue-next'
 import { describeCountdown } from '@shared/calendar'
-import type { Countdown } from '@shared/calendar'
+import type { CalendarEvent, Countdown } from '@shared/calendar'
+import { formatDrinkTime, formatWaterAmount } from '@shared/water'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,7 +27,7 @@ interface CountdownRow {
   remainingLabel: string
 }
 
-type DetailTab = 'basic' | 'almanac' | 'positions' | 'countdowns'
+type DetailTab = 'basic' | 'almanac' | 'positions' | 'countdowns' | 'events'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -41,9 +42,11 @@ const props = withDefaults(
   defineProps<{
     date?: string | null
     countdowns?: Countdown[]
+    events?: CalendarEvent[]
   }>(),
   {
-    countdowns: () => []
+    countdowns: () => [],
+    events: () => []
   }
 )
 
@@ -98,6 +101,21 @@ const countdownRows = computed<CountdownRow[]>(() =>
     item,
     remainingLabel: remainingLabel(item.date)
   }))
+)
+
+/** 该日日程事件：按开始时间升序 */
+const eventRows = computed<CalendarEvent[]>(() =>
+  props.events.slice().sort((left, right) => left.startAt - right.startAt)
+)
+
+/** 事件被撤销清空时，避免停留在空的「日程」页签 */
+watch(
+  () => eventRows.value.length,
+  (length) => {
+    if (length === 0 && activeTab.value === 'events') {
+      activeTab.value = 'basic'
+    }
+  }
 )
 </script>
 
@@ -189,6 +207,21 @@ const countdownRows = computed<CountdownRow[]>(() =>
             @click="activeTab = 'countdowns'"
           >
             倒计日 {{ countdownRows.length }}
+          </Button>
+          <Button
+            v-if="eventRows.length > 0"
+            id="day-detail-tab-events"
+            role="tab"
+            size="sm"
+            class="transition-all duration-200"
+            :variant="activeTab === 'events' ? 'secondary' : 'ghost'"
+            :aria-selected="activeTab === 'events'"
+            :tabindex="activeTab === 'events' ? 0 : -1"
+            aria-controls="day-detail-panel-events"
+            :class="activeTab === 'events' ? 'shadow-soft' : ''"
+            @click="activeTab = 'events'"
+          >
+            日程 {{ eventRows.length }}
           </Button>
         </div>
 
@@ -313,6 +346,43 @@ const countdownRows = computed<CountdownRow[]>(() =>
           >
             <CalendarDays class="size-8 opacity-40" aria-hidden="true" />
             <p class="text-xs">这一天没有倒计日</p>
+          </div>
+        </div>
+
+        <div
+          v-show="activeTab === 'events'"
+          id="day-detail-panel-events"
+          role="tabpanel"
+          aria-labelledby="day-detail-tab-events"
+          class="flex flex-col gap-3 pt-1"
+          :class="{ 'animate-tab-in': activeTab === 'events' }"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-sm font-medium">该日日程</h3>
+            <span class="text-muted-foreground text-xs">
+              共 {{ eventRows.length }} 个
+            </span>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <div
+              v-for="row in eventRows"
+              :key="row.id"
+              class="flex w-full items-center gap-2 rounded-md border p-2 text-left"
+            >
+              <Droplets
+                class="text-water-deep size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 flex-1 truncate text-sm font-mono tabular-nums">
+                {{ formatDrinkTime(row.startAt) }}
+              </span>
+              <span
+                class="text-muted-foreground shrink-0 font-mono text-xs tabular-nums"
+              >
+                {{ formatWaterAmount(row.amountMl) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>

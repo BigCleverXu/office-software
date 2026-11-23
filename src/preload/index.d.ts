@@ -2,6 +2,7 @@ import type { ElectronAPI } from '@electron-toolkit/preload'
 import type { AlarmApi } from '../shared/types'
 import type { MarketApi } from '../shared/market'
 import type { GoldApi } from '../shared/gold'
+import type { WaterApi } from '../shared/water'
 import type { NoteApi } from '../shared/notes'
 import type { UpdateApi } from '../shared/update'
 import type { SettingsApi } from '../shared/settings'
@@ -20,6 +21,7 @@ declare global {
       alarms: AlarmApi
       market: MarketApi
       gold: GoldApi
+      water: WaterApi
       update: UpdateApi
       notes: NoteApi
       calendar: CalendarApi

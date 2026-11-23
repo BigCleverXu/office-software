@@ -3,11 +3,13 @@ import {
   buildMonthGrid,
   daysUntil,
   describeCountdown,
+  eventDateKey,
+  groupEventsByDate,
   isDateOnly,
   parseDateOnly,
   sortCountdowns
 } from '../../src/shared/calendar'
-import type { Countdown } from '../../src/shared/calendar'
+import type { CalendarEvent, Countdown } from '../../src/shared/calendar'
 import {
   BUILTIN_HOLIDAYS_2026,
   getBuiltinHolidays
@@ -16,6 +18,24 @@ import {
 /** 构造一条倒计日，便于排序测试 */
 function countdown(id: string, date: string): Countdown {
   return { id, title: id, date, createdAt: 0, updatedAt: 0 }
+}
+
+/** 构造一条喝水日程事件 */
+function calendarEvent(
+  id: string,
+  date: string,
+  startAt: number
+): CalendarEvent {
+  return {
+    id,
+    title: '喝水 500 ml',
+    date,
+    startAt,
+    amountMl: 500,
+    source: 'water',
+    sourceId: id,
+    createdAt: 0
+  }
 }
 
 /** 固定「今天」：2026-10-23 */
@@ -189,6 +209,63 @@ describe('sortCountdowns', () => {
     expect(sorted).not.toBe(items)
     expect(items.map((item) => item.id)).toEqual(['b', 'a'])
     expect(sorted.map((item) => item.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('eventDateKey', () => {
+  it('按本地自然日返回 YYYY-MM-DD', () => {
+    expect(eventDateKey(new Date(2026, 10, 23, 0, 0).getTime())).toBe(
+      '2026-11-23'
+    )
+    expect(eventDateKey(new Date(2026, 10, 23, 23, 59, 59).getTime())).toBe(
+      '2026-11-23'
+    )
+    expect(eventDateKey(new Date(2026, 0, 1, 12, 0).getTime())).toBe(
+      '2026-01-01'
+    )
+  })
+
+  it('非有限时间戳返回空字符串', () => {
+    expect(eventDateKey(Number.NaN)).toBe('')
+    expect(eventDateKey(Number.POSITIVE_INFINITY)).toBe('')
+  })
+})
+
+describe('groupEventsByDate', () => {
+  it('按日期分组并保持输入顺序', () => {
+    const first = calendarEvent(
+      'a',
+      '2026-11-23',
+      new Date(2026, 10, 23, 9, 5).getTime()
+    )
+    const second = calendarEvent(
+      'b',
+      '2026-11-24',
+      new Date(2026, 10, 24, 10, 0).getTime()
+    )
+    const third = calendarEvent(
+      'c',
+      '2026-11-23',
+      new Date(2026, 10, 23, 15, 30).getTime()
+    )
+    const grouped = groupEventsByDate([first, second, third])
+    expect(Object.keys(grouped)).toEqual(['2026-11-23', '2026-11-24'])
+    expect(grouped['2026-11-23'].map((event) => event.id)).toEqual(['a', 'c'])
+    expect(grouped['2026-11-24'].map((event) => event.id)).toEqual(['b'])
+  })
+
+  it('空数组返回空对象', () => {
+    expect(groupEventsByDate([])).toEqual({})
+  })
+
+  it('返回新数组，不修改入参', () => {
+    const events = [
+      calendarEvent('a', '2026-11-23', new Date(2026, 10, 23, 9, 5).getTime())
+    ]
+    const grouped = groupEventsByDate(events)
+    expect(grouped['2026-11-23']).not.toBe(events)
+    expect(grouped['2026-11-23'][0]).toBe(events[0])
+    expect(events).toHaveLength(1)
   })
 })
 

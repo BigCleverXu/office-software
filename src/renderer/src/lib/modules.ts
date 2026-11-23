@@ -9,6 +9,7 @@ import {
   Coins,
   FolderSearch,
   Gamepad2,
+  GlassWater,
   Globe,
   LineChart,
   MonitorSmartphone,
@@ -27,6 +28,7 @@ import NewsPanel from '@/components/NewsPanel.vue'
 import NotesPanel from '@/components/NotesPanel.vue'
 import QuickSitePanel from '@/components/QuickSitePanel.vue'
 import VideoPanel from '@/components/VideoPanel.vue'
+import WaterPanel from '@/components/WaterPanel.vue'
 import WeatherPanel from '@/components/WeatherPanel.vue'
 
 /** 模块元信息：侧边栏与顶栏均据此渲染 */
@@ -58,6 +60,13 @@ export const MODULES: ModuleMeta[] = [
     description: '查看月历与节假日安排，管理倒计日',
     icon: CalendarDays,
     component: CalendarPanel
+  },
+  {
+    id: 'water',
+    label: '喝水',
+    description: '长按水杯记录饮水，查看今日杯数与总量',
+    icon: GlassWater,
+    component: WaterPanel
   },
   {
     id: 'market',
