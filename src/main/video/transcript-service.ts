@@ -34,6 +34,16 @@ const BUSY_DETAIL = '当前有任务正在进行，请稍后再试'
 /** 合法识别语言 */
 const ENGINE_LANGUAGES: readonly VideoEngineLanguage[] = ['zh', 'en', 'auto']
 
+/**
+ * 取路径的最后一段文件名，同时兼容 POSIX 与 Windows 分隔符。
+ * 口播引擎路径可能来自另一个平台（例如测试模拟 Windows 引擎），
+ * 直接用 path.basename 在 Linux 上无法剥离反斜杠。
+ */
+function fileNameOf(filePath: string): string {
+  const segments = filePath.split(/[\\/]/)
+  return segments[segments.length - 1] || filePath
+}
+
 /** whisper 输出中的纯时间戳行，读取文本时整行丢弃 */
 const TIMESTAMP_LINE_PATTERN =
   /^\[\d{1,2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{1,2}:\d{2}:\d{2}\.\d{3}\]\s*$/
@@ -442,7 +452,7 @@ export class VideoTranscriptService {
         text: cleanTranscriptText(text),
         fileName: basename(filePath),
         filePath,
-        engine: basename(probe.binary),
+        engine: fileNameOf(probe.binary),
         elapsedMs: Math.max(0, this.now() - startedAt)
       })
     } catch (error) {
