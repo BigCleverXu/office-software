@@ -1,7 +1,8 @@
-import { onMounted, ref } from 'vue'
-import type { Ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import type { ComputedRef, Ref } from 'vue'
 import { DEFAULT_WATER_SETTINGS } from '@shared/water'
 import type { WaterApi, WaterState, WaterSyncResult } from '@shared/water'
+import { useToday } from '@/composables/useToday'
 
 export interface UseWater {
   /** 今日统计、记录与杯容量 */
@@ -10,6 +11,8 @@ export interface UseWater {
   loaded: Ref<boolean>
   /** 最近一次失败的中文提示，成功时清空 */
   error: Ref<string>
+  /** 当前本地日期 YYYY-MM-DD，跨零点自动更新 */
+  todayKey: ComputedRef<string>
   addCup: () => Promise<WaterState | null>
   setCupMl: (ml: number) => Promise<boolean>
   removeLast: () => Promise<void>
@@ -56,6 +59,13 @@ export function useWater(): UseWater {
       loaded.value = true
     }
   }
+
+  const todayKey = useToday()
+
+  // 应用常驻托盘可能跨天运行，本地日期变化时重新拉取今日数据
+  watch(todayKey, () => {
+    void refresh()
+  })
 
   const addCup = async (): Promise<WaterState | null> => {
     try {
@@ -118,6 +128,7 @@ export function useWater(): UseWater {
     state,
     loaded,
     error,
+    todayKey,
     addCup,
     setCupMl,
     removeLast,

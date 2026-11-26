@@ -17,7 +17,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useWater } from '@/composables/useWater'
 
-const { state, error, addCup, setCupMl, removeLast, syncCalendar } = useWater()
+const { state, error, todayKey, addCup, setCupMl, removeLast, syncCalendar } =
+  useWater()
 
 const reducedMotion = usePreferredReducedMotion()
 const reduced = computed(() => reducedMotion.value === 'reduce')
@@ -209,6 +210,18 @@ const handleSync = async (): Promise<void> => {
 /** 保存成功后以状态为准同步输入框 */
 watch(cupMl, (value) => {
   cupInput.value = String(value)
+})
+
+/** 跨天时复位水杯与提示；杯容量、历史记录不受影响 */
+watch(todayKey, () => {
+  level.value = 0
+  pouring.value = false
+  glassMessage.value = ''
+  glassMessageFailed.value = false
+  syncMessage.value = ''
+  syncFailed.value = false
+  clearMessageTimer()
+  clearPourTimer()
 })
 
 onUnmounted(() => {
