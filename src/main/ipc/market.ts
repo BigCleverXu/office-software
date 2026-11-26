@@ -6,13 +6,16 @@ import {
   normalizeCode,
   normalizePosition,
   normalizeUsSymbol,
+  parsePriceAlertDraft,
   type AddWatchResult,
   type MarketPosition,
   type MarketState,
+  type PriceAlert,
   type WatchItem
 } from '../../shared/market'
 import type { AppModuleId } from '../../shared/navigation'
 import type { MarketStore } from '../market-store'
+import type { MarketAlertStore } from '../market-alert-store'
 import type { MarketScheduler } from '../market-scheduler'
 import type { UsMarketScheduler } from '../us-market-scheduler'
 import { fetchQuotes } from '../quote-provider'
@@ -20,6 +23,7 @@ import { fetchUsQuotes } from '../us-quote-provider'
 
 export interface MarketIpcDeps {
   store: MarketStore
+  alertStore: MarketAlertStore
   scheduler: MarketScheduler
   usScheduler: UsMarketScheduler
   getWindow: () => BrowserWindow | null
@@ -31,12 +35,13 @@ export interface MarketIpcDeps {
  * 调度器通过 getWatchlist / getSettings 回调读取最新数据，因此无需额外重新调度。
  */
 export function registerMarketIpc(deps: MarketIpcDeps): void {
-  const { store, scheduler, usScheduler, getWindow } = deps
+  const { store, alertStore, scheduler, usScheduler, getWindow } = deps
 
   const buildState = (): MarketState => ({
     snapshot: scheduler.getSnapshot(),
     us: usScheduler.getSnapshot(),
     watchlist: store.getWatchlist(),
+    alerts: alertStore.getAll(),
     settings: store.getSettings()
   })
 
@@ -118,6 +123,49 @@ export function registerMarketIpc(deps: MarketIpcDeps): void {
       const list = store.removeWatch(symbol)
       broadcast()
       return list
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.addAlert,
+    (
+      _event: Electron.IpcMainInvokeEvent,
+      draft: unknown
+    ): PriceAlert | null => {
+      // 入参非法时不写库，直接返回 null
+      const parsed = parsePriceAlertDraft(draft)
+      if (!parsed) {
+        return null
+      }
+      const alert = alertStore.create(parsed)
+      broadcast()
+      return alert
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.removeAlert,
+    (_event: Electron.IpcMainInvokeEvent, id: string): PriceAlert[] => {
+      alertStore.remove(id)
+      broadcast()
+      return alertStore.getAll()
+    }
+  )
+
+  ipcMain.handle(
+    MARKET_CHANNELS.setAlertEnabled,
+    (
+      _event: Electron.IpcMainInvokeEvent,
+      id: string,
+      enabled: unknown
+    ): PriceAlert | null => {
+      // enabled 必须是布尔值，其余类型一律拒绝
+      if (typeof enabled !== 'boolean') {
+        return null
+      }
+      const alert = alertStore.setEnabled(id, enabled)
+      broadcast()
+      return alert
     }
   )
 

@@ -22,7 +22,7 @@ import type { Alarm } from '../shared/types'
 export const DATABASE_FILENAME = 'office-software.db'
 
 /** 当前表结构版本 */
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 /** 默认行情看板设置（也是损坏数据的兜底值） */
 export const DEFAULT_MARKET_SETTINGS: MarketSettings = {
@@ -170,6 +170,23 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(date);
 `
 
+/** market_alerts 表与索引建表语句（v13 新增，也用于旧版本升级） */
+const MARKET_ALERTS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS market_alerts (
+  id                TEXT PRIMARY KEY,
+  symbol            TEXT NOT NULL,
+  name              TEXT NOT NULL DEFAULT '',
+  kind              TEXT NOT NULL DEFAULT 'above',
+  threshold         REAL,
+  range_low         REAL,
+  range_high        REAL,
+  enabled           INTEGER NOT NULL DEFAULT 1,
+  created_at        INTEGER NOT NULL,
+  last_triggered_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_market_alerts_symbol ON market_alerts(symbol);
+`
+
 /** 建表语句 */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS alarms (
@@ -197,7 +214,8 @@ ${FILE_INDEX_TABLE_SQL}
 ${QUICK_SITES_TABLE_SQL}
 ${GOLD_HOLDING_TABLE_SQL}
 ${WATER_TABLES_SQL}
-${CALENDAR_EVENTS_TABLE_SQL}`
+${CALENDAR_EVENTS_TABLE_SQL}
+${MARKET_ALERTS_TABLE_SQL}`
 
 /** alarms 表行结构 */
 interface AlarmRow {
@@ -259,6 +277,20 @@ export interface CalendarEventRow {
   source: string
   source_id: string
   created_at: number
+}
+
+/** market_alerts 表行结构 */
+interface MarketAlertRow {
+  id: string
+  symbol: string
+  name: string
+  kind: string
+  threshold: number | null
+  range_low: number | null
+  range_high: number | null
+  enabled: number
+  created_at: number
+  last_triggered_at: number | null
 }
 
 /** notes 表行结构 */
@@ -378,7 +410,8 @@ function backfillQuickSiteTargets(db: DatabaseSync): void {
  * v7 之前补 quick_site_groups 表；v8 之前为 quick_sites 补 targets 列
  * 并用旧的 browser_id / profile_id 回填；v9 之前为 watchlist 补持仓列；
  * v10 之前补 gold_holding 单行表；v11 之前补喝水设置与水杯记录表；
- * v12 之前补应用内日程事件表；已是最新版本则直接返回。
+ * v12 之前补应用内日程事件表；v13 之前补行情价格提醒表；
+ * 已是最新版本则直接返回。
  */
 function applySchema(db: DatabaseSync): void {
   const version = readUserVersion(db)
@@ -451,6 +484,10 @@ function applySchema(db: DatabaseSync): void {
     if (version < 12) {
       // v1–v11 -> v12：新增应用内日程事件表；v0 时重复执行也安全
       db.exec(CALENDAR_EVENTS_TABLE_SQL)
+    }
+    if (version < 13) {
+      // v1–v12 -> v13：新增行情价格提醒表；v0 时重复执行 IF NOT EXISTS 也安全
+      db.exec(MARKET_ALERTS_TABLE_SQL)
     }
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     db.exec('COMMIT')
@@ -720,6 +757,7 @@ export type {
   AlarmRow,
   CountdownRow,
   HolidayCacheRow,
+  MarketAlertRow,
   NoteRow,
   SettingRow,
   WatchlistRow

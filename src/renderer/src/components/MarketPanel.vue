@@ -12,6 +12,8 @@ import type {
   AddWatchResult,
   MarketPosition,
   MarketRegion,
+  PriceAlert,
+  PriceAlertDraft,
   WatchItem
 } from '@shared/market'
 import AddWatchDialog from '@/components/AddWatchDialog.vue'
@@ -19,6 +21,7 @@ import IndexCard from '@/components/IndexCard.vue'
 import MarketSwitch from '@/components/MarketSwitch.vue'
 import PositionDialog from '@/components/PositionDialog.vue'
 import PositionSummary from '@/components/PositionSummary.vue'
+import PriceAlertDialog from '@/components/PriceAlertDialog.vue'
 import WatchPanel from '@/components/WatchPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -29,6 +32,7 @@ const {
   snapshot,
   usSnapshot,
   watchlist,
+  alerts,
   cnWatchlist,
   usWatchlist,
   settings,
@@ -36,6 +40,9 @@ const {
   addWatch,
   updatePosition,
   removeWatch,
+  addAlert,
+  removeAlert,
+  setAlertEnabled,
   refreshNow,
   setPaused,
   setRegion
@@ -43,8 +50,18 @@ const {
 
 const dialogOpen = ref(false)
 const positionDialogOpen = ref(false)
+const alertDialogOpen = ref(false)
 const editingItem = ref<WatchItem | null>(null)
+const alertItem = ref<WatchItem | null>(null)
 const watchPanelRef = ref<InstanceType<typeof WatchPanel> | null>(null)
+
+/** 当前弹窗对应股票的价格提醒，按创建顺序（由状态推送保证） */
+const alertItemAlerts = computed<PriceAlert[]>(() => {
+  const item = alertItem.value
+  return item
+    ? alerts.value.filter((alert) => alert.symbol === item.symbol)
+    : []
+})
 
 /** 写操作失败提示，3 秒后自动清除 */
 const notice = ref('')
@@ -141,6 +158,42 @@ const handleSavePosition = async (
   return true
 }
 
+/** 打开价格提醒弹窗，聚焦当前股票 */
+const handleEditAlerts = (item: WatchItem): void => {
+  alertItem.value = item
+  alertDialogOpen.value = true
+}
+
+/** 新增提醒：失败提示并返回 false 保持弹窗打开 */
+const handleAddAlert = async (draft: PriceAlertDraft): Promise<boolean> => {
+  const created = await addAlert(draft)
+  if (!created) {
+    showNotice('保存价格提醒失败，请稍后重试')
+    return false
+  }
+  return true
+}
+
+const handleRemoveAlert = async (id: string): Promise<boolean> => {
+  const ok = await removeAlert(id)
+  if (!ok) {
+    showNotice('删除价格提醒失败，请稍后重试')
+  }
+  return ok
+}
+
+const handleToggleAlert = async (
+  id: string,
+  enabled: boolean
+): Promise<boolean> => {
+  const updated = await setAlertEnabled(id, enabled)
+  if (!updated) {
+    showNotice('更新价格提醒失败，请稍后重试')
+    return false
+  }
+  return true
+}
+
 const handleRemove = async (symbol: string): Promise<void> => {
   const item = watchlist.value.find((entry) => entry.symbol === symbol)
   const label = item
@@ -202,10 +255,12 @@ const handleRetry = (): void => {
           :region="region"
           :quotes="activeSnapshot.quotes"
           :watchlist="activeWatchlist"
+          :alerts="alerts"
           :snapshot="activeSnapshot"
           @add="openAddDialog"
           @remove="handleRemove"
           @edit-position="handleEditPosition"
+          @edit-alerts="handleEditAlerts"
           @retry="handleRetry"
         />
       </div>
@@ -227,6 +282,15 @@ const handleRetry = (): void => {
       v-model:open="positionDialogOpen"
       :item="editingItem"
       :on-save="handleSavePosition"
+    />
+
+    <PriceAlertDialog
+      v-model:open="alertDialogOpen"
+      :item="alertItem"
+      :alerts="alertItemAlerts"
+      :on-add="handleAddAlert"
+      :on-remove="handleRemoveAlert"
+      :on-toggle="handleToggleAlert"
     />
   </div>
 </template>

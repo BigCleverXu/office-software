@@ -4,6 +4,8 @@ import type {
   MarketRegion,
   MarketSnapshot,
   MarketState,
+  PriceAlert,
+  PriceAlertDraft,
   WatchItem
 } from '../../../src/shared/market'
 import type { AppModuleId } from '../../../src/shared/navigation'
@@ -28,6 +30,7 @@ const STATE: MarketState = {
   snapshot: SNAPSHOT,
   us: SNAPSHOT,
   watchlist: [],
+  alerts: [],
   settings: { paused: false, lastPage: 'alarms', region: 'cn' }
 }
 
@@ -56,6 +59,11 @@ const refreshNowApi = vi.fn<() => Promise<void>>()
 const setPausedApi = vi.fn<(paused: boolean) => Promise<void>>()
 const setLastPageApi = vi.fn<(page: AppModuleId) => Promise<void>>()
 const setRegionApi = vi.fn<(region: MarketRegion) => Promise<void>>()
+const addAlertApi =
+  vi.fn<(draft: PriceAlertDraft) => Promise<PriceAlert | null>>()
+const removeAlertApi = vi.fn<(id: string) => Promise<PriceAlert[]>>()
+const setAlertEnabledApi =
+  vi.fn<(id: string, enabled: boolean) => Promise<PriceAlert | null>>()
 const onStateChangedApi = vi.fn<() => () => void>()
 
 /** 模拟 preload 暴露的行情 API */
@@ -70,6 +78,9 @@ function stubMarketApi(): void {
         setPaused: setPausedApi,
         setLastPage: setLastPageApi,
         setRegion: setRegionApi,
+        addAlert: addAlertApi,
+        removeAlert: removeAlertApi,
+        setAlertEnabled: setAlertEnabledApi,
         onStateChanged: onStateChangedApi
       }
     }
@@ -85,6 +96,9 @@ beforeEach(() => {
   setPausedApi.mockReset()
   setLastPageApi.mockReset()
   setRegionApi.mockReset()
+  addAlertApi.mockReset()
+  removeAlertApi.mockReset()
+  setAlertEnabledApi.mockReset()
   onStateChangedApi.mockReset()
   onStateChangedApi.mockReturnValue(() => undefined)
   stubMarketApi()

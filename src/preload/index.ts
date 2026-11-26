@@ -12,6 +12,7 @@ import {
   type MarketPosition,
   type MarketRegion,
   type MarketState,
+  type PriceAlertDraft,
   type WatchItem
 } from '../shared/market'
 import type { AppModuleId } from '../shared/navigation'
@@ -156,6 +157,12 @@ const market: MarketApi = {
     ipcRenderer.invoke(MARKET_CHANNELS.updatePosition, symbol, position),
   removeWatch: (symbol: string) =>
     ipcRenderer.invoke(MARKET_CHANNELS.removeWatch, symbol),
+  addAlert: (draft: PriceAlertDraft) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.addAlert, draft),
+  removeAlert: (id: string) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.removeAlert, id),
+  setAlertEnabled: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke(MARKET_CHANNELS.setAlertEnabled, id, enabled),
   refreshNow: () => ipcRenderer.invoke(MARKET_CHANNELS.refreshNow),
   setPaused: (paused: boolean) =>
     ipcRenderer.invoke(MARKET_CHANNELS.setPaused, paused),

@@ -21,6 +21,8 @@ import { DEVICE_CHANNELS } from '../shared/devices'
 import { AlarmStore } from './alarm-store'
 import { AlarmScheduler } from './scheduler'
 import { MarketStore } from './market-store'
+import { MarketAlertStore } from './market-alert-store'
+import { MarketAlertService } from './market-alert-service'
 import { MarketScheduler } from './market-scheduler'
 import { UsMarketScheduler } from './us-market-scheduler'
 import { GoldStore } from './gold-store'
@@ -61,7 +63,7 @@ import {
 import { fetchQuotes } from './quote-provider'
 import { fetchUsQuotes } from './us-quote-provider'
 import { createTray } from './tray'
-import { showAlarmNotification } from './notifier'
+import { showAlarmNotification, showPriceAlertNotification } from './notifier'
 import { closeDatabase, openDatabase } from './database'
 import { SettingsStore } from './settings-store'
 import { FileIndexStore } from './file-index-store'
@@ -382,6 +384,21 @@ app.whenReady().then(() => {
   })
 
   const marketStore = new MarketStore(db)
+  const marketAlertStore = new MarketAlertStore(db)
+
+  // 价格提醒服务：命中后弹系统通知并广播最新状态；在调度器 start 之前创建
+  const marketAlertService = new MarketAlertService({
+    store: marketAlertStore,
+    onTrigger: (alert, price) => {
+      showPriceAlertNotification(alert, price, () => {
+        showMainWindow()
+        mainWindow?.webContents.send(MARKET_CHANNELS.navigate, 'market')
+      })
+    },
+    onChange: () => {
+      pushMarketState()
+    }
+  })
 
   const noteStore = new NoteStore(db)
   registerNotesIpc({ store: noteStore, getWindow: () => mainWindow })
@@ -434,7 +451,13 @@ app.whenReady().then(() => {
     getWatchlist: () =>
       marketStore.getWatchlist().filter((item) => item.market !== 'us'),
     getSettings: () => marketStore.getSettings(),
-    onSnapshot: () => {
+    onSnapshot: (snapshot) => {
+      // 先判定价格提醒（会写入触发记录），再广播与刷新托盘；
+      // 暂停刷新时只有缓存行情，不判定，避免用旧价误触发
+      marketAlertService.evaluate(
+        snapshot.quotes,
+        snapshot.trading && snapshot.status !== 'paused'
+      )
       pushMarketState()
       refreshTrayTooltip()
     }
@@ -446,7 +469,11 @@ app.whenReady().then(() => {
     getWatchlist: () =>
       marketStore.getWatchlist().filter((item) => item.market === 'us'),
     getSettings: () => marketStore.getSettings(),
-    onSnapshot: () => {
+    onSnapshot: (snapshot) => {
+      marketAlertService.evaluate(
+        snapshot.quotes,
+        snapshot.trading && snapshot.status !== 'paused'
+      )
       pushMarketState()
     }
   })
@@ -458,6 +485,7 @@ app.whenReady().then(() => {
       snapshot: marketScheduler.getSnapshot(),
       us: usMarketScheduler.getSnapshot(),
       watchlist: marketStore.getWatchlist(),
+      alerts: marketAlertStore.getAll(),
       settings: marketStore.getSettings()
     })
   }
@@ -484,6 +512,7 @@ app.whenReady().then(() => {
 
   registerMarketIpc({
     store: marketStore,
+    alertStore: marketAlertStore,
     scheduler: marketScheduler,
     usScheduler: usMarketScheduler,
     getWindow: () => mainWindow

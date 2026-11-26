@@ -188,7 +188,16 @@ export class MarketStore {
 
   /** 删除自选股，返回删除后的列表副本；symbol 不存在时列表不变 */
   removeWatch(symbol: string): WatchItem[] {
-    this.db.prepare('DELETE FROM watchlist WHERE symbol = ?').run(symbol)
+    this.db.exec('BEGIN')
+    try {
+      // 同时删除该股票的价格提醒，避免残留孤儿提醒
+      this.db.prepare('DELETE FROM market_alerts WHERE symbol = ?').run(symbol)
+      this.db.prepare('DELETE FROM watchlist WHERE symbol = ?').run(symbol)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
     return this.getWatchlist()
   }
 

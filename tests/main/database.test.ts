@@ -98,7 +98,7 @@ afterEach(() => {
 })
 
 describe('openDatabase 建库', () => {
-  it(':memory: 打开后全部表存在且版本号为 12', () => {
+  it(':memory: 打开后全部表存在且版本号为 13', () => {
     const db = openTestDatabase({ path: ':memory:' })
     expect(tableNames(db)).toEqual([
       'alarms',
@@ -107,6 +107,7 @@ describe('openDatabase 建库', () => {
       'file_index',
       'gold_holding',
       'holiday_cache',
+      'market_alerts',
       'notes',
       'quick_site_groups',
       'quick_sites',
@@ -115,8 +116,8 @@ describe('openDatabase 建库', () => {
       'water_records',
       'water_settings'
     ])
-    expect(userVersion(db)).toBe(12)
-    expect(SCHEMA_VERSION).toBe(12)
+    expect(userVersion(db)).toBe(13)
+    expect(SCHEMA_VERSION).toBe(13)
   })
 
   it('没有 legacyDir 且无旧文件时不迁移、不报错', () => {
@@ -129,6 +130,7 @@ describe('openDatabase 建库', () => {
       'file_index',
       'gold_holding',
       'holiday_cache',
+      'market_alerts',
       'notes',
       'quick_site_groups',
       'quick_sites',
@@ -213,6 +215,7 @@ CREATE TABLE settings (
       'file_index',
       'gold_holding',
       'holiday_cache',
+      'market_alerts',
       'notes',
       'quick_site_groups',
       'quick_sites',
@@ -221,7 +224,7 @@ CREATE TABLE settings (
       'water_records',
       'water_settings'
     ])
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(countRows(db, 'alarms')).toBe(1)
     expect(countRows(db, 'watchlist')).toBe(1)
   })
@@ -286,7 +289,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toEqual([
       'alarms',
       'calendar_events',
@@ -294,6 +297,7 @@ CREATE TABLE notes (
       'file_index',
       'gold_holding',
       'holiday_cache',
+      'market_alerts',
       'notes',
       'quick_site_groups',
       'quick_sites',
@@ -390,7 +394,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('file_index')
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'alarms')).toBe(1)
@@ -431,7 +435,7 @@ CREATE TABLE notes (
       name: string
     }[]
     expect(columns.map((column) => column.name)).toContain('category')
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('quick_sites')
 
     const note = db
@@ -471,7 +475,7 @@ CREATE TABLE notes (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('quick_sites')
     expect(countRows(db, 'quick_sites')).toBe(0)
     expect(countRows(db, 'notes')).toBe(1)
@@ -530,7 +534,7 @@ CREATE TABLE quick_sites (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('quick_site_groups')
     expect(countRows(db, 'quick_site_groups')).toBe(0)
     expect(countRows(db, 'quick_sites')).toBe(1)
@@ -538,7 +542,7 @@ CREATE TABLE quick_sites (
     // 重复打开同一数据库：版本已是最新，迁移不报错且数据不变
     closeTestDatabase(db)
     const reopened = openTestDatabase({ path: dbPath })
-    expect(userVersion(reopened)).toBe(12)
+    expect(userVersion(reopened)).toBe(13)
     expect(tableNames(reopened)).toContain('quick_site_groups')
     expect(countRows(reopened, 'quick_sites')).toBe(1)
   })
@@ -591,7 +595,7 @@ CREATE TABLE quick_sites (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     const columns = db
       .prepare('PRAGMA table_info(quick_sites)')
       .all() as unknown as { name: string }[]
@@ -652,7 +656,7 @@ CREATE TABLE quick_sites (
     closeTestDatabase(first)
 
     const second = openTestDatabase({ path: dbPath })
-    expect(userVersion(second)).toBe(12)
+    expect(userVersion(second)).toBe(13)
     expect(JSON.parse(readTargets(second, 's1'))).toEqual([
       { browserId: 'edge', profileId: 'P1' }
     ])
@@ -689,7 +693,7 @@ CREATE TABLE settings (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     const columns = db
       .prepare('PRAGMA table_info(watchlist)')
       .all() as unknown as { name: string }[]
@@ -733,7 +737,7 @@ CREATE TABLE watchlist (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('gold_holding')
     const columns = db
       .prepare('PRAGMA table_info(gold_holding)')
@@ -773,7 +777,7 @@ CREATE TABLE gold_holding (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('water_settings')
     expect(tableNames(db)).toContain('water_records')
     expect(countRows(db, 'water_settings')).toBe(0)
@@ -819,7 +823,7 @@ CREATE TABLE water_records (
 
     const db = openTestDatabase({ path: dbPath })
 
-    expect(userVersion(db)).toBe(12)
+    expect(userVersion(db)).toBe(13)
     expect(tableNames(db)).toContain('calendar_events')
     expect(countRows(db, 'calendar_events')).toBe(0)
     expect(countRows(db, 'water_settings')).toBe(1)
@@ -1088,6 +1092,7 @@ describe('openDatabase 迁移幂等与异常数据', () => {
         'file_index',
         'gold_holding',
         'holiday_cache',
+        'market_alerts',
         'notes',
         'quick_site_groups',
         'quick_sites',

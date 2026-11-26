@@ -11,6 +11,7 @@ import {
   formatMoney,
   formatPercent,
   formatPrice,
+  formatPriceAlert,
   formatSigned,
   formatSignedMoney,
   hasPosition,
@@ -19,19 +20,22 @@ import {
   isMarketRegion,
   isSameTradingSession,
   isValidPosition,
+  isValidPriceAlertKind,
   isTradingDay,
   isTradingTime,
   marketFromSymbol,
+  matchesPriceAlert,
   nextOpenAt,
   nextUsOpenStart,
   normalizeCode,
   normalizePosition,
   normalizeUsSymbol,
+  parsePriceAlertDraft,
   symbolFromCode,
   usClosedReason,
   usMarketOpen
 } from '../../src/shared/market'
-import type { Quote, WatchItem } from '../../src/shared/market'
+import type { PriceAlert, Quote, WatchItem } from '../../src/shared/market'
 
 // 2026-01-05 周一、01-06 周二、01-09 周五
 // 2026-01-03 周六、01-04 周日
@@ -716,5 +720,328 @@ describe('formatSignedMoney', () => {
     expect(formatSignedMoney(1234.5)).toBe('+1,234.50')
     expect(formatSignedMoney(-1234.5)).toBe('-1,234.50')
     expect(formatSignedMoney(0)).toBe('0.00')
+  })
+})
+
+// ---------- 价格提醒 ----------
+
+/** 构造一条价格提醒，未使用的字段统一为 null */
+function alertOf(
+  kind: PriceAlert['kind'],
+  values: Pick<PriceAlert, 'threshold' | 'rangeLow' | 'rangeHigh'>,
+  enabled = true
+): PriceAlert {
+  return {
+    id: 'alert-1',
+    symbol: 'sh600519',
+    name: '贵州茅台',
+    kind,
+    threshold: values.threshold,
+    rangeLow: values.rangeLow,
+    rangeHigh: values.rangeHigh,
+    enabled,
+    createdAt: 0,
+    lastTriggeredAt: null
+  }
+}
+
+describe('isValidPriceAlertKind', () => {
+  it('三种合法类型返回 true', () => {
+    expect(isValidPriceAlertKind('above')).toBe(true)
+    expect(isValidPriceAlertKind('below')).toBe(true)
+    expect(isValidPriceAlertKind('range')).toBe(true)
+  })
+
+  it('其它值返回 false', () => {
+    expect(isValidPriceAlertKind('equal')).toBe(false)
+    expect(isValidPriceAlertKind('')).toBe(false)
+    expect(isValidPriceAlertKind(null)).toBe(false)
+    expect(isValidPriceAlertKind(1)).toBe(false)
+  })
+})
+
+describe('parsePriceAlertDraft', () => {
+  it('above / below 规范化并清空区间', () => {
+    expect(
+      parsePriceAlertDraft({
+        symbol: ' sh600519 ',
+        name: '贵州茅台',
+        kind: 'above',
+        threshold: 12.5,
+        rangeLow: 1,
+        rangeHigh: 2
+      })
+    ).toEqual({
+      symbol: 'sh600519',
+      name: '贵州茅台',
+      kind: 'above',
+      threshold: 12.5,
+      rangeLow: null,
+      rangeHigh: null
+    })
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sz000001',
+        name: '平安银行',
+        kind: 'below',
+        threshold: 9.9,
+        rangeLow: null,
+        rangeHigh: null
+      })
+    ).toEqual({
+      symbol: 'sz000001',
+      name: '平安银行',
+      kind: 'below',
+      threshold: 9.9,
+      rangeLow: null,
+      rangeHigh: null
+    })
+  })
+
+  it('range 规范化并清空阈值', () => {
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '贵州茅台',
+        kind: 'range',
+        threshold: 99,
+        rangeLow: 10,
+        rangeHigh: 12
+      })
+    ).toEqual({
+      symbol: 'sh600519',
+      name: '贵州茅台',
+      kind: 'range',
+      threshold: null,
+      rangeLow: 10,
+      rangeHigh: 12
+    })
+  })
+
+  it('name 非字符串时按空字符串处理', () => {
+    const draft = parsePriceAlertDraft({
+      symbol: 'sh600519',
+      name: 123,
+      kind: 'above',
+      threshold: 12
+    })
+    expect(draft).not.toBeNull()
+    expect(draft?.name).toBe('')
+  })
+
+  it('symbol 为空或只有空格返回 null', () => {
+    expect(
+      parsePriceAlertDraft({
+        symbol: '',
+        name: '',
+        kind: 'above',
+        threshold: 12
+      })
+    ).toBeNull()
+    expect(
+      parsePriceAlertDraft({
+        symbol: '   ',
+        name: '',
+        kind: 'above',
+        threshold: 12
+      })
+    ).toBeNull()
+    expect(
+      parsePriceAlertDraft({ name: '', kind: 'above', threshold: 12 })
+    ).toBeNull()
+  })
+
+  it('kind 非法或 raw 非对象返回 null', () => {
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '',
+        kind: 'equal',
+        threshold: 12
+      })
+    ).toBeNull()
+    expect(parsePriceAlertDraft(null)).toBeNull()
+    expect(parsePriceAlertDraft('sh600519')).toBeNull()
+  })
+
+  it('above / below 的 threshold 非法返回 null', () => {
+    for (const threshold of [0, -1, '12', Number.NaN, 1e6 + 1]) {
+      expect(
+        parsePriceAlertDraft({
+          symbol: 'sh600519',
+          name: '',
+          kind: 'above',
+          threshold
+        })
+      ).toBeNull()
+      expect(
+        parsePriceAlertDraft({
+          symbol: 'sh600519',
+          name: '',
+          kind: 'below',
+          threshold
+        })
+      ).toBeNull()
+    }
+  })
+
+  it('range 缺一端或下限不小于上限返回 null', () => {
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '',
+        kind: 'range',
+        rangeLow: 10,
+        rangeHigh: null
+      })
+    ).toBeNull()
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '',
+        kind: 'range',
+        rangeLow: null,
+        rangeHigh: 12
+      })
+    ).toBeNull()
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '',
+        kind: 'range',
+        rangeLow: 12,
+        rangeHigh: 12
+      })
+    ).toBeNull()
+    expect(
+      parsePriceAlertDraft({
+        symbol: 'sh600519',
+        name: '',
+        kind: 'range',
+        rangeLow: 12,
+        rangeHigh: 10
+      })
+    ).toBeNull()
+  })
+})
+
+describe('matchesPriceAlert', () => {
+  it('above 命中与未命中', () => {
+    const alert = alertOf('above', {
+      threshold: 12.5,
+      rangeLow: null,
+      rangeHigh: null
+    })
+    expect(matchesPriceAlert(alert, 12.5)).toBe(true)
+    expect(matchesPriceAlert(alert, 13)).toBe(true)
+    expect(matchesPriceAlert(alert, 12.49)).toBe(false)
+  })
+
+  it('below 命中与未命中', () => {
+    const alert = alertOf('below', {
+      threshold: 12.5,
+      rangeLow: null,
+      rangeHigh: null
+    })
+    expect(matchesPriceAlert(alert, 12.5)).toBe(true)
+    expect(matchesPriceAlert(alert, 12)).toBe(true)
+    expect(matchesPriceAlert(alert, 12.51)).toBe(false)
+  })
+
+  it('range 含边界', () => {
+    const alert = alertOf('range', {
+      threshold: null,
+      rangeLow: 10,
+      rangeHigh: 12
+    })
+    expect(matchesPriceAlert(alert, 10)).toBe(true)
+    expect(matchesPriceAlert(alert, 11)).toBe(true)
+    expect(matchesPriceAlert(alert, 12)).toBe(true)
+    expect(matchesPriceAlert(alert, 9.99)).toBe(false)
+    expect(matchesPriceAlert(alert, 12.01)).toBe(false)
+  })
+
+  it('现价为 null 或非有限数返回 false', () => {
+    const alert = alertOf('above', {
+      threshold: 12.5,
+      rangeLow: null,
+      rangeHigh: null
+    })
+    expect(matchesPriceAlert(alert, null)).toBe(false)
+    expect(matchesPriceAlert(alert, Number.NaN)).toBe(false)
+    expect(matchesPriceAlert(alert, Number.POSITIVE_INFINITY)).toBe(false)
+  })
+
+  it('提醒停用返回 false', () => {
+    const alert = alertOf(
+      'above',
+      { threshold: 12.5, rangeLow: null, rangeHigh: null },
+      false
+    )
+    expect(matchesPriceAlert(alert, 20)).toBe(false)
+  })
+})
+
+describe('formatPriceAlert', () => {
+  it('三种类型的文案', () => {
+    expect(
+      formatPriceAlert({
+        kind: 'above',
+        threshold: 12.5,
+        rangeLow: null,
+        rangeHigh: null
+      })
+    ).toBe('≥ 12.50')
+    expect(
+      formatPriceAlert({
+        kind: 'below',
+        threshold: 12.5,
+        rangeLow: null,
+        rangeHigh: null
+      })
+    ).toBe('≤ 12.50')
+    expect(
+      formatPriceAlert({
+        kind: 'range',
+        threshold: null,
+        rangeLow: 10,
+        rangeHigh: 12
+      })
+    ).toBe('10.00 ~ 12.00')
+  })
+
+  it('数据不全返回空字符串', () => {
+    expect(
+      formatPriceAlert({
+        kind: 'above',
+        threshold: null,
+        rangeLow: null,
+        rangeHigh: null
+      })
+    ).toBe('')
+    expect(
+      formatPriceAlert({
+        kind: 'below',
+        threshold: null,
+        rangeLow: null,
+        rangeHigh: null
+      })
+    ).toBe('')
+    expect(
+      formatPriceAlert({
+        kind: 'range',
+        threshold: null,
+        rangeLow: 10,
+        rangeHigh: null
+      })
+    ).toBe('')
+    expect(
+      formatPriceAlert({
+        kind: 'range',
+        threshold: null,
+        rangeLow: null,
+        rangeHigh: 12
+      })
+    ).toBe('')
   })
 })

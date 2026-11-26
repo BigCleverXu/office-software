@@ -186,6 +186,150 @@ export function formatSignedMoney(value: number): string {
   return amount
 }
 
+/** 价格提醒类型：高于等于 / 低于等于 / 进入区间 */
+export type PriceAlertKind = 'above' | 'below' | 'range'
+
+/** 单条价格提醒 */
+export interface PriceAlert {
+  id: string
+  /** 带市场前缀的代码，如 'sh600519' */
+  symbol: string
+  /** 名称缓存 */
+  name: string
+  kind: PriceAlertKind
+  /** above / below 的触发价格；range 时为 null */
+  threshold: number | null
+  /** range 下限；above / below 时为 null */
+  rangeLow: number | null
+  /** range 上限；above / below 时为 null */
+  rangeHigh: number | null
+  enabled: boolean
+  createdAt: number
+  /** 最近一次触发时间（毫秒）；未触发为 null */
+  lastTriggeredAt: number | null
+}
+
+/** 新增价格提醒的输入 */
+export interface PriceAlertDraft {
+  symbol: string
+  name: string
+  kind: PriceAlertKind
+  threshold: number | null
+  rangeLow: number | null
+  rangeHigh: number | null
+}
+
+/** 提醒价格上限 */
+const MAX_ALERT_PRICE = 1e6
+
+/** 是否为合法的价格提醒类型 */
+export function isValidPriceAlertKind(value: unknown): value is PriceAlertKind {
+  return value === 'above' || value === 'below' || value === 'range'
+}
+
+/** 校验提醒价格：有限数且落在 (0, MAX_ALERT_PRICE] 区间内 */
+function isValidAlertPrice(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value <= MAX_ALERT_PRICE
+  )
+}
+
+/**
+ * 校验并规范化新增价格提醒的输入。
+ *
+ * raw 必须是对象；symbol trim 后非空；kind 必须合法。above / below 要求
+ * threshold 合法且把 rangeLow / rangeHigh 置 null；range 要求 rangeLow、
+ * rangeHigh 均合法且 rangeLow < rangeHigh，并把 threshold 置 null。
+ * 任一条件不满足返回 null。
+ */
+export function parsePriceAlertDraft(raw: unknown): PriceAlertDraft | null {
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const source = raw as Record<string, unknown>
+  const symbol = typeof source.symbol === 'string' ? source.symbol.trim() : ''
+  if (symbol === '') {
+    return null
+  }
+  const name = typeof source.name === 'string' ? source.name : ''
+  const kind = source.kind
+  if (!isValidPriceAlertKind(kind)) {
+    return null
+  }
+  if (kind === 'above' || kind === 'below') {
+    if (!isValidAlertPrice(source.threshold)) {
+      return null
+    }
+    return {
+      symbol,
+      name,
+      kind,
+      threshold: source.threshold,
+      rangeLow: null,
+      rangeHigh: null
+    }
+  }
+  if (
+    !isValidAlertPrice(source.rangeLow) ||
+    !isValidAlertPrice(source.rangeHigh) ||
+    source.rangeLow >= source.rangeHigh
+  ) {
+    return null
+  }
+  return {
+    symbol,
+    name,
+    kind,
+    threshold: null,
+    rangeLow: source.rangeLow,
+    rangeHigh: source.rangeHigh
+  }
+}
+
+/** 判断现价是否命中提醒；现价缺失、提醒停用时返回 false */
+export function matchesPriceAlert(
+  alert: PriceAlert,
+  price: number | null
+): boolean {
+  if (price === null || !Number.isFinite(price)) {
+    return false
+  }
+  if (!alert.enabled) {
+    return false
+  }
+  if (alert.kind === 'above') {
+    return alert.threshold !== null && price >= alert.threshold
+  }
+  if (alert.kind === 'below') {
+    return alert.threshold !== null && price <= alert.threshold
+  }
+  return (
+    alert.rangeLow !== null &&
+    alert.rangeHigh !== null &&
+    alert.rangeLow <= price &&
+    price <= alert.rangeHigh
+  )
+}
+
+/** 提醒条件文案：'≥ 12.50' / '≤ 12.50' / '10.00 ~ 12.00'；数据不全返回 '' */
+export function formatPriceAlert(
+  alert: Pick<PriceAlert, 'kind' | 'threshold' | 'rangeLow' | 'rangeHigh'>
+): string {
+  if (alert.kind === 'above') {
+    return alert.threshold === null ? '' : `≥ ${alert.threshold.toFixed(2)}`
+  }
+  if (alert.kind === 'below') {
+    return alert.threshold === null ? '' : `≤ ${alert.threshold.toFixed(2)}`
+  }
+  if (alert.rangeLow === null || alert.rangeHigh === null) {
+    return ''
+  }
+  return `${alert.rangeLow.toFixed(2)} ~ ${alert.rangeHigh.toFixed(2)}`
+}
+
 /** 页面设置 */
 export interface MarketSettings {
   paused: boolean
@@ -233,6 +377,8 @@ export interface MarketState {
   /** 美股快照 */
   us: MarketSnapshot
   watchlist: WatchItem[]
+  /** 全部价格提醒，按创建时间升序 */
+  alerts: PriceAlert[]
   settings: MarketSettings
 }
 
@@ -242,6 +388,9 @@ export const MARKET_CHANNELS = {
   addWatch: 'market:add-watch',
   updatePosition: 'market:update-position',
   removeWatch: 'market:remove-watch',
+  addAlert: 'market:add-alert',
+  removeAlert: 'market:remove-alert',
+  setAlertEnabled: 'market:set-alert-enabled',
   refreshNow: 'market:refresh-now',
   setPaused: 'market:set-paused',
   setLastPage: 'market:set-last-page',
@@ -267,6 +416,9 @@ export interface MarketApi {
     position: MarketPosition
   ) => Promise<WatchItem | null>
   removeWatch: (symbol: string) => Promise<WatchItem[]>
+  addAlert: (draft: PriceAlertDraft) => Promise<PriceAlert | null>
+  removeAlert: (id: string) => Promise<PriceAlert[]>
+  setAlertEnabled: (id: string, enabled: boolean) => Promise<PriceAlert | null>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<void>
   setLastPage: (page: AppModuleId) => Promise<void>

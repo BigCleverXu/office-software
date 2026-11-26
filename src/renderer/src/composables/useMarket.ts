@@ -7,6 +7,8 @@ import type {
   MarketSettings,
   MarketSnapshot,
   MarketState,
+  PriceAlert,
+  PriceAlertDraft,
   WatchItem
 } from '@shared/market'
 import type { AppModuleId } from '@shared/navigation'
@@ -15,6 +17,7 @@ interface UseMarket {
   snapshot: Ref<MarketSnapshot>
   usSnapshot: Ref<MarketSnapshot>
   watchlist: Ref<WatchItem[]>
+  alerts: Ref<PriceAlert[]>
   cnWatchlist: ComputedRef<WatchItem[]>
   usWatchlist: ComputedRef<WatchItem[]>
   settings: Ref<MarketSettings>
@@ -26,6 +29,9 @@ interface UseMarket {
     position: MarketPosition
   ) => Promise<WatchItem | null>
   removeWatch: (symbol: string) => Promise<boolean>
+  addAlert: (draft: PriceAlertDraft) => Promise<PriceAlert | null>
+  removeAlert: (id: string) => Promise<boolean>
+  setAlertEnabled: (id: string, enabled: boolean) => Promise<PriceAlert | null>
   refreshNow: () => Promise<void>
   setPaused: (paused: boolean) => Promise<boolean>
   setLastPage: (page: AppModuleId) => Promise<void>
@@ -67,6 +73,7 @@ export function useMarket(): UseMarket {
   const snapshot = ref<MarketSnapshot>({ ...INITIAL_SNAPSHOT })
   const usSnapshot = ref<MarketSnapshot>({ ...INITIAL_US_SNAPSHOT })
   const watchlist = ref<WatchItem[]>([])
+  const alerts = ref<PriceAlert[]>([])
   const settings = ref<MarketSettings>({ ...INITIAL_SETTINGS })
   const loaded = ref(false)
   let unsubscribe: (() => void) | null = null
@@ -85,6 +92,7 @@ export function useMarket(): UseMarket {
     snapshot.value = state.snapshot
     usSnapshot.value = state.us
     watchlist.value = state.watchlist
+    alerts.value = state.alerts ?? []
     settings.value = state.settings
   }
 
@@ -136,6 +144,56 @@ export function useMarket(): UseMarket {
     }
   }
 
+  /** 新增价格提醒；成功则追加到本地列表，失败返回 null */
+  const addAlert = async (
+    draft: PriceAlertDraft
+  ): Promise<PriceAlert | null> => {
+    try {
+      const created = await window.api.market.addAlert(draft)
+      if (!created) {
+        return null
+      }
+      const exists = alerts.value.some((alert) => alert.id === created.id)
+      if (!exists) {
+        alerts.value = [...alerts.value, created]
+      }
+      return created
+    } catch {
+      return null
+    }
+  }
+
+  /** 删除价格提醒；失败时回滚本地列表 */
+  const removeAlert = async (id: string): Promise<boolean> => {
+    const previous = alerts.value
+    try {
+      alerts.value = await window.api.market.removeAlert(id)
+      return true
+    } catch {
+      alerts.value = previous
+      return false
+    }
+  }
+
+  /** 启用 / 停用价格提醒；成功则替换列表中对应项 */
+  const setAlertEnabled = async (
+    id: string,
+    enabled: boolean
+  ): Promise<PriceAlert | null> => {
+    try {
+      const updated = await window.api.market.setAlertEnabled(id, enabled)
+      if (!updated) {
+        return null
+      }
+      alerts.value = alerts.value.map((alert) =>
+        alert.id === updated.id ? updated : alert
+      )
+      return updated
+    } catch {
+      return null
+    }
+  }
+
   const refreshNow = (): Promise<void> => window.api.market.refreshNow()
 
   const setPaused = async (paused: boolean): Promise<boolean> => {
@@ -183,6 +241,7 @@ export function useMarket(): UseMarket {
     snapshot,
     usSnapshot,
     watchlist,
+    alerts,
     cnWatchlist,
     usWatchlist,
     settings,
@@ -191,6 +250,9 @@ export function useMarket(): UseMarket {
     addWatch,
     updatePosition,
     removeWatch,
+    addAlert,
+    removeAlert,
+    setAlertEnabled,
     refreshNow,
     setPaused,
     setLastPage,

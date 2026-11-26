@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import { LineChart, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-vue-next'
+import {
+  Bell,
+  BellRing,
+  LineChart,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2
+} from 'lucide-vue-next'
 import { formatMoney } from '@shared/market'
 import type {
   MarketRegion,
   MarketSnapshot,
+  PriceAlert,
   Quote,
   WatchItem
 } from '@shared/market'
@@ -28,6 +37,7 @@ const props = defineProps<{
   region: MarketRegion
   quotes: Quote[]
   watchlist: WatchItem[]
+  alerts: PriceAlert[]
   snapshot: MarketSnapshot
 }>()
 
@@ -35,12 +45,16 @@ const emit = defineEmits<{
   add: []
   remove: [symbol: string]
   'edit-position': [item: WatchItem]
+  'edit-alerts': [item: WatchItem]
   retry: []
 }>()
 
 /** 表格中中性数值单元与涨跌数值单元的公共样式 */
 const MUTED_CELL = 'text-muted-foreground px-2 py-2 text-right tabular-nums'
 const TONE_CELL = 'px-2 py-2 text-right tabular-nums'
+/** 操作按钮基础类：中性图标、默认降噪，行悬停 / 组内聚焦时恢复可见 */
+const ACTION_BUTTON_CLASS =
+  'text-muted-foreground opacity-60 transition-opacity group-hover/row:opacity-100 group-focus-within/actions:opacity-100 focus-visible:opacity-100 hover:text-foreground'
 
 /** 持仓股数：整数省略小数位，其余保留两位 */
 const formatShares = (value: number): string => {
@@ -98,6 +112,14 @@ const rows = computed<Row[]>(() =>
 const statusText = computed(() => statusLabel(props.snapshot))
 
 const statusTone = computed(() => statusToneClass(props.snapshot))
+
+/** 存在启用中价格提醒的 symbol 集合，用于高亮铃铛图标 */
+const activeAlertSymbols = computed(() => {
+  const symbols = props.alerts
+    .filter((alert) => alert.enabled)
+    .map((alert) => alert.symbol)
+  return new Set(symbols)
+})
 
 /** 各市场差异化的标题与文案 */
 const copy = computed(() =>
@@ -208,14 +230,18 @@ defineExpose({ highlight })
               <th class="px-2 py-2 text-right font-medium">最低</th>
               <th class="px-2 py-2 text-right font-medium">成交额</th>
               <th class="px-2 py-2 text-right font-medium">更新时间</th>
-              <th class="w-16 px-2 py-2" />
+              <th
+                class="bg-muted sticky right-0 z-20 w-[116px] min-w-[116px] px-3 py-2 text-right font-medium shadow-[inset_1px_0_0_var(--border)]"
+              >
+                操作
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="row in rows"
               :key="row.item.symbol"
-              class="border-b transition-colors hover:bg-muted/40 last:border-b-0"
+              class="group/row border-b transition-colors hover:bg-muted/40 last:border-b-0"
               :class="{ 'bg-accent/60': highlighted === row.item.symbol }"
             >
               <td class="px-2 py-2">
@@ -249,14 +275,45 @@ defineExpose({ highlight })
               <td :class="MUTED_CELL">{{ row.low }}</td>
               <td :class="MUTED_CELL">{{ row.amount }}</td>
               <td :class="MUTED_CELL">{{ row.time }}</td>
-              <td class="px-2 py-2">
-                <div class="flex items-center justify-end gap-1">
+              <td
+                class="sticky right-0 z-10 px-3 py-2 shadow-[inset_1px_0_0_var(--border)] transition-colors"
+                :class="
+                  highlighted === row.item.symbol
+                    ? 'bg-accent'
+                    : 'bg-card group-hover/row:bg-muted'
+                "
+              >
+                <div
+                  class="group/actions flex items-center justify-end gap-1 whitespace-nowrap"
+                >
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="价格提醒"
+                        :class="
+                          activeAlertSymbols.has(row.item.symbol)
+                            ? 'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary'
+                            : ACTION_BUTTON_CLASS
+                        "
+                        @click="emit('edit-alerts', row.item)"
+                      >
+                        <BellRing
+                          v-if="activeAlertSymbols.has(row.item.symbol)"
+                        />
+                        <Bell v-else />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>价格提醒</TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger as-child>
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         aria-label="编辑持仓"
+                        :class="ACTION_BUTTON_CLASS"
                         @click="emit('edit-position', row.item)"
                       >
                         <Pencil />
@@ -270,7 +327,10 @@ defineExpose({ highlight })
                         variant="ghost"
                         size="icon-sm"
                         :aria-label="deleteLabel"
-                        class="text-destructive hover:text-destructive"
+                        :class="[
+                          ACTION_BUTTON_CLASS,
+                          'hover:bg-destructive/10 hover:text-destructive'
+                        ]"
                         @click="emit('remove', row.item.symbol)"
                       >
                         <Trash2 />
