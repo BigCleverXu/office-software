@@ -164,7 +164,7 @@ pnpm run build:mac
 pnpm run build:linux
 ```
 
-推送 `v*` 标签会触发 GitHub Actions 构建三端安装包并发布 Release；版本号以 `package.json` 为准。
+推送 `v*` 标签会触发 GitHub Actions 构建三端安装包并发布 Release；版本号以 `package.json` 为准。发布说明放在 `.github/release-notes/<标签名>.md`，Release 发布后由工作流自动写入，未提供时保留默认说明。
 
 ## Recommended IDE Setup
 
