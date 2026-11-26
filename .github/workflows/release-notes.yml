@@ -1,8 +1,14 @@
 name: Release Notes
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要写入发布说明的标签（如 v2.11.6）'
+        required: true
 
 permissions:
   contents: write
@@ -10,7 +16,7 @@ permissions:
 jobs:
   apply:
     name: 应用版本发布说明
-    if: ${{ !github.event.release.prerelease }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: 检出默认分支
@@ -21,7 +27,7 @@ jobs:
       - name: 写入发布说明
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
         run: |
           NOTES=".github/release-notes/${TAG}.md"
           if [ ! -f "$NOTES" ]; then
